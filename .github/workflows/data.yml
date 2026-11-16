@@ -1,0 +1,47 @@
+name: Refresh map data
+
+on:
+  schedule:
+    - cron: "17 10 * * *"     # news, every day about 5-6 am Eastern
+    - cron: "43 9 * * 1"      # brand locations, Mondays
+  workflow_dispatch:
+    inputs:
+      what:
+        description: "What to rebuild"
+        type: choice
+        default: news
+        options: [news, brands, demographics, places, all]
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: News
+        if: github.event.schedule == '17 10 * * *' || inputs.what == 'news' || inputs.what == 'all'
+        env:
+          GOOGLE_GEOCODING_KEY: ${{ secrets.GOOGLE_GEOCODING_KEY }}
+        run: python3 scripts/build_news.py
+      - name: Places
+        if: inputs.what == 'places' || inputs.what == 'all'
+        run: python3 scripts/build_places.py
+      - name: Brand locations
+        if: github.event.schedule == '43 9 * * 1' || inputs.what == 'brands' || inputs.what == 'all'
+        run: python3 scripts/build_brands.py
+      - name: Demographics
+        if: inputs.what == 'demographics' || inputs.what == 'all'
+        run: python3 scripts/build_demographics.py
+      - name: Commit
+        run: |
+          git config user.name "sight-data-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data
+          git diff --cached --quiet || git commit -m "Refresh map data"
+          git push

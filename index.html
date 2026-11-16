@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>South Atlantic Sight</title>
+<meta name="description" content="North Carolina site map from South Atlantic Sites: parcels, traffic, zoning, demographics, road projects and property news.">
+<link rel="icon" href="assets/sas-lantern.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css?v=1">
+</head>
+<body>
+<div id="app">
+  <aside id="panel" aria-label="Map controls">
+    <header id="brand">
+      <img src="assets/sas-lantern.png" alt="" width="46" height="46">
+      <div>
+        <h1>South Atlantic Sight</h1>
+        <p>North Carolina site map by <a href="https://www.southatlanticsites.com" target="_blank" rel="noopener">South Atlantic Sites</a></p>
+      </div>
+    </header>
+
+    <form id="search" autocomplete="off">
+      <label class="sr" for="search-mode">Search by</label>
+      <select id="search-mode">
+        <option value="address">Address</option>
+        <option value="owner">Owner</option>
+        <option value="pin">Parcel ID</option>
+      </select>
+      <label class="sr" for="search-q">Search</label>
+      <input id="search-q" type="search" placeholder="Street address or place in NC">
+      <button type="submit">Find</button>
+    </form>
+    <div id="search-results" hidden></div>
+
+    <nav id="tabs" role="tablist">
+      <button role="tab" data-tab="layers" aria-selected="true">Layers</button>
+      <button role="tab" data-tab="here" aria-selected="false">This spot</button>
+      <button role="tab" data-tab="news" aria-selected="false">News</button>
+      <button role="tab" data-tab="listings" aria-selected="false">Listings</button>
+    </nav>
+
+    <div id="tabpanes">
+      <section id="tab-layers" role="tabpanel"></section>
+      <section id="tab-here" role="tabpanel" hidden>
+        <p class="empty">Click anywhere on the map to see what is at that spot: the parcel, zoning, flood zone, nearby road projects and the population around it. Turn on the layers you want included.</p>
+      </section>
+      <section id="tab-news" role="tabpanel" hidden></section>
+      <section id="tab-listings" role="tabpanel" hidden></section>
+    </div>
+
+    <footer id="fine">
+      Public data from NC OneMap, NCDOT, FEMA, the US Census Bureau, counties and cities. For screening only; verify before relying on it.
+    </footer>
+  </aside>
+
+  <main id="stage">
+    <div id="map" aria-label="Map"></div>
+    <button id="panel-toggle" type="button" aria-controls="panel" aria-expanded="true">Hide panel</button>
+    <div id="tools" role="toolbar" aria-label="Map tools">
+      <button type="button" id="t-base">Satellite</button>
+      <button type="button" id="t-measure">Measure</button>
+      <button type="button" id="t-share">Copy link</button>
+      <button type="button" id="t-print">Print</button>
+      <button type="button" id="t-home">Whole state</button>
+    </div>
+    <div id="measure" hidden>
+      <strong id="m-read">Click the map to start measuring.</strong>
+      <span><button type="button" id="m-undo">Undo</button><button type="button" id="m-clear">Clear</button><button type="button" id="m-done">Done</button></span>
+    </div>
+    <div id="legend" hidden></div>
+    <div id="status" aria-live="polite"></div>
+  </main>
+</div>
+<script src="js/config.js?v=1"></script>
+<script src="js/layers.js?v=1"></script>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>
