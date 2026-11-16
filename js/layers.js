@@ -114,7 +114,8 @@
     { id: 'watersewer', group: 'Utilities', name: 'Public water and sewer service areas (2004)', type: 'arcgis', swatch: '#0284C7',
       url: NC1 + 'NC1Map_Water_Sewer_2004/MapServer', layers: [2, 4], opacity: 0.45, minZoom: 9,
       note: 'The only statewide service-area map, last compiled in 2004. Use as a starting point and confirm with the utility.',
-      identify: [{ layer: 2, title: 'Public sewer system (2004)', tol: 1 }, { layer: 4, title: 'Public water system (2004)', tol: 1 }] },
+      identify: [{ layer: 2, title: 'Public sewer system (2004)', tol: 1, pick: [['sssyname', 'System'], ['wapcs', 'County']] },
+                 { layer: 4, title: 'Public water system (2004)', tol: 1, pick: [['wasyname', 'System'], ['wapcs', 'County']] }] },
 
     // ---------- Imagery
     { id: 'ortho', group: 'Imagery', name: 'NC aerial photos (latest state flight)', type: 'image', swatch: '#4B5563', minZoom: 12,
