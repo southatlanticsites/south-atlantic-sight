@@ -282,7 +282,7 @@
     if (v == null || v === '' || v === ' ') return null;
     const t = types && types[k];
     if (t === 'esriFieldTypeDate' && typeof v === 'number') return new Date(v).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
-    if (k === 'SFHA_TF') return v === 'T' ? 'Yes' : 'No';
+    if (k === 'SFHA_TF') return (v === 'T' || v === 1) ? 'Yes' : 'No';
     if (typeof v === 'number') {
       if (v <= -9999) return null;
       if (/cost|val$|value|price/i.test(k)) return money(v);

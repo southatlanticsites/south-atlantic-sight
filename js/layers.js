@@ -86,10 +86,10 @@
       title: 'Opportunity Zone', pick: [['GEOID10', 'Census tract']], note: 'Federal Qualified Opportunity Zone census tracts (HUD).' },
 
     // ---------- Environment
-    { id: 'flood', group: 'Environment', name: 'FEMA flood zones', type: 'arcgis', swatch: '#3B82F6', minZoom: 14,
-      url: 'https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer', layers: [28], opacity: 0.6,
-      note: 'FEMA National Flood Hazard Layer. Zoom in to see zones. A screening view, not a flood determination.',
-      identify: [{ layer: 28, title: 'Flood zone', tol: 1, pick: [['FLD_ZONE', 'Zone'], ['ZONE_SUBTY', 'Description'], ['SFHA_TF', 'In the 100-year floodplain'], ['STATIC_BFE', 'Base flood elevation (ft)']] }] },
+    { id: 'flood', group: 'Environment', name: 'Flood zones', type: 'arcgis', swatch: '#3B82F6', minZoom: 12,
+      url: 'https://spartagis.ncem.org/arcgis/rest/services/Public/FRIS_FloodZones/MapServer', layers: [2], opacity: 0.6,
+      note: 'North Carolina\'s effective flood maps (NC Floodplain Mapping Program, the state partner that produces FEMA\'s maps here). A screening view, not a flood determination.',
+      identify: [{ layer: 2, title: 'Flood zone', tol: 1, pick: [['ZONE_LID_VALUE', 'Zone'], ['ZONESUB_LID_VALUE', 'Description'], ['SFHA_TF', 'In the 100-year floodplain'], ['STATIC_BFE', 'Base flood elevation (ft)']] }] },
     { id: 'wetlands', group: 'Environment', name: 'Wetlands (National Wetlands Inventory)', type: 'arcgis', swatch: '#0F766E', minZoom: 12,
       url: 'https://fwspublicservices.wim.usgs.gov/wetlandsmapservice/rest/services/Wetlands/MapServer', layers: [0], opacity: 0.65,
       note: 'US Fish and Wildlife mapped wetlands. Indicative only; a delineation is needed for any site.',

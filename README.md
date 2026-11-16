@@ -18,7 +18,7 @@ Live at https://southatlanticsites.github.io/south-atlantic-sight/
 | Traffic counts (AADT) | NCDOT | live |
 | Zoning | Wake County (all towns), Durham, Greensboro, Charlotte-Mecklenburg | live |
 | Development cases | Wake County, Durham | live |
-| Flood zones | FEMA National Flood Hazard Layer | live |
+| Flood zones | NC Floodplain Mapping Program (state effective flood maps) | live |
 | Wetlands | US Fish and Wildlife NWI | live |
 | Schools, water and sewer areas, aerial photos | NC OneMap | live |
 | Fire and EMS stations | USGS National Map | live |
