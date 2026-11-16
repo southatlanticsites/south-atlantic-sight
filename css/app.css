@@ -142,6 +142,8 @@ body.panel-closed #panel{display:none}
   #measure{right:10px;top:96px}
   #brand{padding:10px 14px 8px}
   #brand h1{font-size:22px}
+  #legend{left:auto;right:10px;bottom:30px;max-width:190px;max-height:40%;overflow:auto;font-size:11.5px}
+  #fine{display:none}
 }
 @media print{
   #panel,#tools,#panel-toggle,#measure,#status{display:none!important}
