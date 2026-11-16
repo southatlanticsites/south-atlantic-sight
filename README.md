@@ -16,7 +16,7 @@ Live at https://southatlanticsites.github.io/south-atlantic-sight/
 | Parcels | NC OneMap statewide parcels | live |
 | NCDOT planned projects, active construction, city limits | NCDOT | live |
 | Traffic counts (AADT) | NCDOT | live |
-| Zoning | Wake County (all towns), Durham, Greensboro, Charlotte-Mecklenburg | live |
+| Zoning | 92 city and county map services listed in `js/zoning-sources.js`; the map switches source by area | live |
 | Development cases | Wake County, Durham | live |
 | Flood zones | NC Floodplain Mapping Program (state effective flood maps) | live |
 | Wetlands | US Fish and Wildlife NWI | live |
@@ -31,6 +31,8 @@ Live at https://southatlanticsites.github.io/south-atlantic-sight/
 ## Adding a layer
 
 Add one entry to `js/layers.js`. Any public ArcGIS MapServer works with `type: 'arcgis'`.
+
+To add a zoning jurisdiction, add one line to `js/zoning-sources.js` (name, service URL, layer ids, bounding box, zone field).
 
 ## Planned schools and fire stations
 

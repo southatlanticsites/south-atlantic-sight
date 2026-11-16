@@ -297,6 +297,7 @@
     const keys = pick ? pick.map(k => Array.isArray(k) ? k : [k, null]).filter(k => k[0] in a) : Object.keys(a).filter(k => !SKIP.test(k)).map(k => [k, null]);
     const rows = [];
     keys.slice(0, 16).forEach(k => { const v = value(k[0], a[k[0]], types); if (v != null) rows.push('<dt>' + esc(k[1] || label(k[0], aliases)) + '</dt><dd>' + v + '</dd>'); });
+    if (!rows.length && pick) return attrTable(a, null, aliases, types);
     return rows.length ? '<dl>' + rows.join('') + '</dl>' : '<p class="fineprint">No details published for this feature.</p>';
   }
   function parcelHtml(a) {
@@ -359,7 +360,9 @@
     const lost = '<p class="fineprint">This source did not answer. Click again in a moment.</p>';
     on.forEach(id => {
       const def = byId[id];
-      if (!def.identify || (def.minZoom && map.getZoom() < def.minZoom && id !== 'parcels')) return;
+      if (def.minZoom && map.getZoom() < def.minZoom && id !== 'parcels') return;
+      const idfs = def.identify || (H[id].identify ? H[id].identify(lat, lng) : null);
+      if (!idfs || !idfs.length) return;
       // one placeholder per layer so slow sources show that they are still working
       const hold = document.createElement('div');
       hold.className = 'sec';
@@ -367,30 +370,40 @@
       secs.appendChild(hold);
       let found = 0, failed = false;
       const put = (title, html) => { if (seq !== state.clickSeq) return; found++; const d = document.createElement('div'); d.className = 'sec'; d.innerHTML = '<h3>' + esc(title) + '</h3>' + html; secs.insertBefore(d, hold); };
-      const jobs = def.identify.map(idf => {
+      const jobs = idfs.map(idf => {
         if (idf.kind === 'parcel') sawParcelLayer = true;
         if (idf.service) {             // one request for every sub-layer of the service
           const b = map.getBounds(), div = map.getDiv();
-          return arc(def.url + '/identify', { geometry: lng + ',' + lat, geometryType: 'esriGeometryPoint', sr: 4326, layers: 'all:' + def.layers.join(','), tolerance: idf.tol || 1,
+          const ask = tol => arc((idf.url || def.url) + '/identify', { geometry: lng + ',' + lat, geometryType: 'esriGeometryPoint', sr: 4326, layers: 'all:' + (idf.layers || def.layers).join(','), tolerance: tol,
             mapExtent: [b.getSouthWest().lng(), b.getSouthWest().lat(), b.getNorthEast().lng(), b.getNorthEast().lat()].join(','),
-            imageDisplay: div.clientWidth + ',' + div.clientHeight + ',96', returnGeometry: false }).then(d => {
-            (d.results || []).slice(0, 3).forEach(r => {
+            imageDisplay: div.clientWidth + ',' + div.clientHeight + ',96', returnGeometry: false });
+          const first = idf.src ? 0 : (idf.tol || 1);
+          return ask(first).then(d => (d.results && d.results.length) || !idf.src ? d : ask(4)).then(d => {
+            const seen = {};
+            (d.results || []).forEach(r => {
+              if (seen[r.layerName] || Object.keys(seen).length >= 3) return;   // one answer per sub-layer
+              seen[r.layerName] = 1;
               const a = {};
               Object.keys(r.attributes).forEach(k => { if (r.attributes[k] !== 'Null' && r.attributes[k] !== '') a[k] = r.attributes[k]; });
-              put(r.layerName || idf.title, attrTable(a, idf.pick));
+              put(idf.src ? idf.title + ' (' + r.layerName + ')' : (r.layerName || idf.title), attrTable(a, idf.pick) + (idf.foot || ''));
             });
           });
         }
         const url = idf.url || (def.url + '/' + idf.layer);
         const tol = idf.tol || 1;
         const geom = tol <= 1 ? { geometry: lng + ',' + lat, geometryType: 'esriGeometryPoint' } : { geometry: envelope(latLng, tol), geometryType: 'esriGeometryEnvelope' };
-        return arc(url + '/query', Object.assign(geom, { inSR: 4326, spatialRel: 'esriSpatialRelIntersects', outFields: '*', returnGeometry: !!idf.geometry, outSR: 4326, geometryPrecision: 6, resultRecordCount: 5 })).then(d => {
+        const base = { inSR: 4326, spatialRel: 'esriSpatialRelIntersects', outFields: '*', returnGeometry: !!idf.geometry, outSR: 4326, geometryPrecision: 6, resultRecordCount: 5 };
+        // Zoning polygons often leave out the street, so widen the search a little when the exact point misses.
+        return arc(url + '/query', Object.assign({}, geom, base)).then(d => (d.features && d.features.length) || !idf.src ? d :
+          arc(url + '/query', Object.assign({ geometry: envelope(latLng, 5), geometryType: 'esriGeometryEnvelope' }, base))).then(d => {
           if (seq !== state.clickSeq) return;
           const types = {};
           (d.fields || []).forEach(f => { types[f.name] = f.type; });
+          const seenZ = {};
           (d.features || []).slice(0, 3).forEach(f => {
+            if (idf.src) { const k = zKey(f.attributes, idf.src); if (!k || seenZ[k]) return; seenZ[k] = 1; }
             if (idf.kind === 'parcel') { drawParcel(f.geometry); put('Parcel', parcelHtml(f.attributes)); }
-            else put(idf.title, attrTable(f.attributes, idf.pick, d.fieldAliases, types));
+            else put(idf.title, attrTable(f.attributes, idf.pick, d.fieldAliases, types) + (idf.foot || ''));
           });
         });
       });
@@ -690,6 +703,84 @@
     refresh() {}
   };
 
+  // ------------------------------------------------------------------ zoning (many sources, shown by area)
+  const ZSRC = window.SIGHT_ZONING || [];
+  const ZPAL = ['#F6E27A', '#F4A259', '#E76F51', '#C9ADA7', '#9D8DF1', '#74C0FC', '#63E6BE', '#B2F2BB', '#FFC9C9', '#D0BFFF', '#FFD8A8', '#A5D8FF', '#E599F7', '#C0EB75', '#FFA8A8', '#99E9F2'];
+  const zoning = { subs: {}, visible: false };
+  function zKey(p, src) {
+    for (const f of src.f) if (p[f] != null && p[f] !== '') return String(p[f]);
+    for (const k in p) if (/zon|class|district/i.test(k) && typeof p[k] === 'string' && p[k].trim()) return p[k];
+    return '';
+  }
+  function zColor(code) { let h = 0; for (let i = 0; i < code.length; i++) h = (h * 31 + code.charCodeAt(i)) >>> 0; return ZPAL[h % ZPAL.length]; }
+  function makeZoningFeatures(src) {
+    const data = new google.maps.Data();
+    let vis = false, seq = 0;
+    data.setStyle(f => ({ clickable: false, fillColor: zColor(f.getProperty('__z') || ''), fillOpacity: 0.5, strokeColor: '#5B4A1E', strokeWeight: 0.7, strokeOpacity: 0.8 }));
+    async function refresh() {
+      if (!vis) return;
+      const b = map.getBounds();
+      if (!b) return;
+      const my = ++seq, sw = b.getSouthWest(), ne = b.getNorthEast();
+      const p = { where: '1=1', geometry: [sw.lng(), sw.lat(), ne.lng(), ne.lat()].join(','), geometryType: 'esriGeometryEnvelope', inSR: 4326, spatialRel: 'esriSpatialRelIntersects',
+        outFields: '*', outSR: 4326, f: 'geojson', resultRecordCount: 2000, maxAllowableOffset: (ne.lng() - sw.lng()) / 1500, geometryPrecision: 6 };
+      try {
+        // Parcel-by-parcel zoning can exceed one response, so read up to four pages per layer.
+        const pull = async id => {
+          const all = [];
+          for (let page = 0; page < 4; page++) {
+            const gj = await fetch(src.u + '/' + id + '/query?' + qs(Object.assign({ resultOffset: page * 2000 }, p))).then(r => r.json());
+            if (!gj || !gj.features) break;
+            all.push(gj);
+            const more = gj.exceededTransferLimit || (gj.properties && gj.properties.exceededTransferLimit);
+            if (!more || gj.features.length < 2000) break;
+          }
+          return all;
+        };
+        const sets = [].concat.apply([], await Promise.all(src.l.map(pull)));
+        if (my !== seq || !vis) return;
+        data.forEach(f => data.remove(f));
+        sets.forEach(gj => {
+          gj.features.forEach(f => { f.properties = { __z: zKey(f.properties || {}, src) }; delete f.id; });
+          data.addGeoJson(gj);
+        });
+      } catch (e) { if (my === seq) rowState('zoning', 'A zoning source for this area is not responding right now.', 'warn'); }
+    }
+    return { show() { vis = true; data.setMap(map); refresh(); }, hide() { vis = false; seq++; data.setMap(null); data.forEach(f => data.remove(f)); }, refresh: refresh };
+  }
+  H.zoning = {
+    show() { zoning.visible = true; this.refresh(); },
+    hide() { zoning.visible = false; Object.keys(zoning.subs).forEach(i => { const s = zoning.subs[i]; if (s.on) { s.h.hide(); s.on = false; } }); },
+    refresh() {
+      if (!zoning.visible) return;
+      const z = map.getZoom(), b = map.getBounds();
+      if (!b) return;
+      const sw = b.getSouthWest(), ne = b.getNorthEast();
+      const hits = z >= 11 ? ZSRC.map((s, i) => ({ s: s, i: i })).filter(o => o.s.b[0] < ne.lng() && o.s.b[2] > sw.lng() && o.s.b[1] < ne.lat() && o.s.b[3] > sw.lat()) : [];
+      const show = hits.filter(o => z >= o.s.z).slice(0, 12);
+      const want = new Set(show.map(o => o.i));
+      Object.keys(zoning.subs).forEach(i => { const s = zoning.subs[i]; if (s.on && !want.has(+i)) { s.h.hide(); s.on = false; } });
+      show.forEach(o => {
+        let sub = zoning.subs[o.i];
+        if (!sub) sub = zoning.subs[o.i] = { on: false, h: o.s.t === 'x' ? makeImageLayer({ id: 'zoning', type: 'arcgis', url: o.s.u, layers: o.s.l, opacity: 0.6, swatch: '#D9A441' }) : makeZoningFeatures(o.s) };
+        if (!sub.on) { sub.on = true; sub.h.show(); } else sub.h.refresh();
+      });
+      if (z < 11) return;
+      const wait = hits.filter(o => z < o.s.z).map(o => o.s.n);
+      rowState('zoning', !hits.length ? 'No zoning source is loaded for this area yet.' :
+        (show.length ? 'Sources in this view: ' + show.map(o => o.s.n).join('; ') + '.' : '') + (wait.length ? ' Zoom in more for ' + wait.join('; ') + '.' : ''), 'info');
+    },
+    identify(lat, lng) {
+      const out = [];
+      ZSRC.filter(s => lng >= s.b[0] && lng <= s.b[2] && lat >= s.b[1] && lat <= s.b[3]).slice(0, 6).forEach(s => {
+        const foot = '<p class="fineprint">From the public map service for ' + esc(s.n) + (s.d ? ', catalog entry dated ' + esc(s.d) : '') + '. Zoning changes often; confirm with the planning office.</p>';
+        if (s.t === 'x' && s.l.length > 1) out.push({ service: true, url: s.u, layers: s.l, title: 'Zoning', tol: 1, src: s, foot: foot });
+        else s.l.slice(0, 6).forEach(id => out.push({ url: s.u + '/' + id, title: 'Zoning: ' + s.n, tol: 1, pick: s.f, src: s, foot: foot }));
+      });
+      return out;
+    }
+  };
+
   // ------------------------------------------------------------------ legend
   function updateLegend() {
     const box = $('#legend'), parts = [];
@@ -839,7 +930,9 @@
       o.setStyle({ fillOpacity: 0, strokeColor: '#0B1A33', strokeWeight: 1.5, strokeOpacity: 0.7, clickable: false });
     }).catch(() => {});
 
-    const start = h.l != null ? h.l.split(',').filter(Boolean) : CFG.defaultLayers;
+    const start = Array.from(new Set((h.l != null ? h.l.split(',').filter(Boolean) : CFG.defaultLayers).map(id => /^zoning-/.test(id) ? 'zoning' : id)));
+    const zAbout = rowEls.zoning && rowEls.zoning.querySelector('.about');
+    if (zAbout) zAbout.textContent = ' Zoning from ' + ZSRC.length + ' city and county map services. It appears once you zoom in to a covered area, and each source uses its own colors, so click a spot for the district. Covered: ' + ZSRC.map(s => s.n).join('; ') + '.';
     google.maps.event.addListenerOnce(map, 'idle', () => {
       start.forEach(id => setLayer(id, true, true));
       refreshHints(); updateLegend();

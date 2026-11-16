@@ -56,6 +56,7 @@ button,select,input{font:inherit}
 .layer .meta[hidden]{display:none}
 .layer .hint{color:var(--gold2)}
 .layer .warn{color:#FCA5A5}
+.layer .info{color:var(--mist)}
 .layer .more{background:none;border:0;color:var(--mist);text-decoration:underline;padding:0;cursor:pointer;font-size:12.5px}
 .key{margin:6px 0 2px 24px;display:grid;gap:3px;font-size:12.5px;color:var(--cream)}
 .key div{display:flex;gap:7px;align-items:center}
