@@ -305,7 +305,7 @@
     let meta = null, metaP = null, mt = null, visible = false;
     const cache = {};
     const getMeta = () => metaP || (metaP = fetch(def.grid + '/meta.json').then(r => r.json()).then(m => { meta = m; meta.has = new Set(m.cells); return m; }));
-    const cell = k => cache[k] || (cache[k] = fetch(def.grid + '/' + k + '.json').then(r => r.json()).then(a => a.map(x => ({ c: x[0], p: decodeLine(x[1]) }))).catch(() => []));
+    const cell = k => cache[k] || (cache[k] = fetch(def.grid + '/' + k + '.json').then(r => r.json()).then(a => a.map(x => Array.isArray(x[1]) ? { c: x[0], r: x[1].map(decodeLine), n: x[2] || '' } : { c: x[0], p: decodeLine(x[1]), n: x[2] || '' })).catch(() => []));
     function cellsIn(w, s, e, n) {
       const c = meta.cell, out = [];
       for (let i = Math.floor(w / c); i <= Math.floor(e / c); i++)
@@ -328,6 +328,12 @@
       sets.forEach(lines => lines.forEach(L => {
         const st = GRID_STYLE[def.render].call({ meta: meta }, L.c, z);
         if (!st) return;
+        if (L.r) {
+          ctx.beginPath();
+          L.r.forEach(q => { for (let i = 0; i < q.length; i += 2) { const px = q[i] * sc - x * 256, py = q[i + 1] * sc - y * 256; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); });
+          ctx.globalAlpha = st.alpha == null ? 0.45 : st.alpha; ctx.fillStyle = st.fill; ctx.fill('evenodd');
+          return;
+        }
         const p = L.p;
         ctx.beginPath();
         for (let i = 0; i < p.length; i += 2) {
@@ -363,7 +369,15 @@
       let best = null;
       sets.forEach(lines => lines.forEach(L => {
         if (def.hitFilter && !def.hitFilter(L.c)) return;
-        for (let i = 0; i + 3 < L.p.length; i += 2) { const d = segDist(px, py, L.p, i); if (!best || d < best.d) best = { d: d, c: L.c }; }
+        const consider = d => { if (!best || d < best.d) best = { d: d, c: L.c, n: L.n, area: !!L.r }; };
+        if (L.r) {
+          let inside = false;
+          L.r.forEach(q => { for (let i = 0, j = q.length - 2; i < q.length; j = i, i += 2) { if ((q[i + 1] > py) !== (q[j + 1] > py) && px < (q[j] - q[i]) * (py - q[i + 1]) / (q[j + 1] - q[i + 1]) + q[i]) inside = !inside; } });
+          if (inside) { consider(0); return; }
+          L.r.forEach(q => { for (let i = 0; i + 3 < q.length; i += 2) consider(segDist(px, py, q, i)); });
+          return;
+        }
+        for (let i = 0; i + 3 < L.p.length; i += 2) consider(segDist(px, py, L.p, i));
       }));
       if (!best) return null;
       best.ft = best.d * (40075016.686 / 256) * Math.cos(lat * Math.PI / 180) * 3.28084;
@@ -397,8 +411,11 @@
       if (/Gravity/.test(t)) return { color: '#15803D', width: w };
       return { color: '#9CA3AF', width: 1.2, dash: [2, 4], alpha: 0.8 };
     },
-    hydro(c) {
-      return [{ color: '#2563EB', width: 1.3 }, { color: '#0284C7', width: 1.3 }, { color: '#0F766E', width: 1.2, dash: [4, 3] }, { color: '#1D4ED8', width: 2.6 }, { color: '#1D4ED8', width: 2.2 }][c];
+    hydro(c, z) {
+      if (c >= 10) return { fill: { 12: '#14B8A6', 14: '#60A5FA' }[c] || '#3B82F6', alpha: c === 12 ? 0.28 : c === 14 ? 0.2 : 0.45 };
+      const w = z >= 15 ? 1.6 : z >= 13 ? 1.2 : 0.9;
+      return [{ color: '#1D4ED8', width: w + 0.3 }, { color: '#2563EB', width: w, dash: [6, 3] }, { color: '#60A5FA', width: w * 0.8, dash: [2, 3] },
+        { color: '#2563EB', width: w }, { color: '#0E7490', width: w }, { color: '#1D4ED8', width: w, alpha: 0.5 }][c];
     },
   };
   const GRID_DESCRIBE = {
@@ -412,10 +429,11 @@
     },
     hydro(b, meta, mpp) {
       if (!b) return null;
-      const on = b.ft <= Math.max(12, 10 * mpp);
-      return [{ title: on ? 'Mapped water feature' : 'Nearest mapped stream or pond', html: '<p class="lead">' + esc(meta.kinds[b.c]) + '</p>' +
-        '<p class="sublead">' + (on ? 'At this spot' : 'About ' + num(Math.round(b.ft / 10) * 10) + ' feet away') + '</p>' +
-        '<p class="fineprint">Johnston County hydrology (2013). Most of the county is in the Neuse River basin, where 50-foot riparian buffers can apply along streams; NCDEQ makes the call on site.</p>' }];
+      const on = b.d === 0 || b.ft <= Math.max(12, 10 * mpp);
+      const kind = b.area ? meta.areaKinds[b.c] : meta.lineKinds[b.c];
+      return [{ title: on ? 'Mapped water feature' : 'Nearest mapped stream or water body', html: '<p class="lead">' + esc(b.n || kind) + '</p>' +
+        '<p class="sublead">' + (b.n ? esc(kind) + ', ' : '') + (on ? (b.area && b.d === 0 ? 'this spot is in it' : 'at this spot') : 'about ' + num(Math.round(b.ft / 10) * 10) + ' feet away') + '</p>' +
+        '<p class="fineprint">USGS National Hydrography Dataset, high resolution (last release, 2023). Stream buffer rules apply in the Neuse, Tar-Pamlico, Jordan Lake, Catawba, Randleman and Goose Creek basins, and many towns add their own; perennial and intermittent streams usually count. NCDEQ or the local planning office makes the call on site.</p>' }];
     }
   };
 
@@ -1148,7 +1166,7 @@
       o.setStyle({ fillOpacity: 0, strokeColor: '#0B1A33', strokeWeight: 1.5, strokeOpacity: 0.7, clickable: false });
     }).catch(() => {});
 
-    const start = Array.from(new Set((h.l != null ? h.l.split(',').filter(Boolean) : CFG.defaultLayers).map(id => /^zoning-/.test(id) ? 'zoning' : id === 'jc-contours' ? 'contours' : id)));
+    const start = Array.from(new Set((h.l != null ? h.l.split(',').filter(Boolean) : CFG.defaultLayers).map(id => /^zoning-/.test(id) ? 'zoning' : id === 'jc-contours' ? 'contours' : id === 'jc-hydro' ? 'hydro' : id)));
     const zAbout = rowEls.zoning && rowEls.zoning.querySelector('.about');
     if (zAbout) zAbout.textContent = ' Zoning from ' + ZSRC.length + ' city and county map services. It appears once you zoom in to a covered area, and each source uses its own colors, so click a spot for the district. Covered: ' + ZSRC.map(s => s.n).join('; ') + '.';
     google.maps.event.addListenerOnce(map, 'idle', () => {

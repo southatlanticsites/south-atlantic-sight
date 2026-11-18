@@ -84,8 +84,8 @@
       note: 'US Fish and Wildlife mapped wetlands. Indicative only; a delineation is needed for any site.',
       identify: [{ layer: 0, title: 'Mapped wetland', tol: 1 }] },
 
-    { id: 'jc-hydro', group: 'Environment', name: 'Streams and ponds: Johnston County', type: 'grid', render: 'hydro', grid: 'data/joco/hydro', swatch: 'line:#2563EB', minZoom: 12, reach: 0.01,
-      note: 'Johnston County GIS hydrology (2013): streams, ponds, swamps and the Neuse and Little rivers. Click a spot for the nearest mapped stream or pond and the distance to it.' },
+    { id: 'hydro', group: 'Environment', name: 'Streams, ponds and lakes', type: 'grid', render: 'hydro', grid: 'data/hydro', swatch: 'line:#2563EB', minZoom: 12, reach: 0.01,
+      note: 'Statewide USGS National Hydrography Dataset, high resolution (the last USGS release, 2023). Solid lines are perennial streams, dashed are intermittent, dotted are ephemeral; ponds, lakes, rivers and swamps are shaded. Click a spot for the nearest stream or water body, its name and the distance.' },
     { id: 'contours', group: 'Environment', name: 'Topography (contours and ground elevation)', type: 'image', png: true, swatch: 'line:#1F2937', minZoom: 13, opacity: 0.6, z: 8, elev: true,
       url: NCEL + 'DEM03_Contours2_raster/ImageServer', byZoom: [[15, NCEL + 'DEM03_Contours2_raster/ImageServer'], [13, NCEL + 'DEM03_Contours20_raster/ImageServer']],
       note: 'Statewide contours from North Carolina\'s LiDAR elevation program (bare ground, 3-foot grid, flown county by county; flight years vary). 20-foot lines at zoom 13-14, 2-foot lines from zoom 15. Click any spot for its ground elevation. Sites graded after the county\'s flight will differ; a survey governs.' },

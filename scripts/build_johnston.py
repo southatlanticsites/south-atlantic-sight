@@ -2,10 +2,10 @@
 
 Usage:  python3 scripts/build_johnston.py <folder with the extracted shapefiles>
 
-Expects Sewer.shp, jchydro.shp, elementary.shp, middle.shp
+Expects Sewer.shp, elementary.shp, middle.shp
 and high.shp somewhere under that folder. Writes to data/joco/.
 
-Line layers (sewer, streams) are cut into a grid of small files so the
+The sewer layer are cut into a grid of small files so the
 browser only fetches the cells in view. Each line is stored as a Google encoded
 polyline (precision 1e-6) with a short property code.
 """
@@ -80,14 +80,6 @@ def grid(name, gdf, code, cell, simplify_ft, extra_meta):
     print(f'{name}: {len(gdf)} lines, {len(cells)} cells, {total / 1e6:.1f} MB')
 
 
-def hydro_kind(code):
-    c = (code if isinstance(code, str) else '').strip(" '").lower()
-    if c == 'nr': return 'Neuse River'
-    if c == 'lr': return 'Little River'
-    if any(s in c for s in ('pond', 'lake', 'lagoon')) or c in ('pone', 'sp'): return 'Pond or lake'
-    if any(s in c for s in ('swp', 'swamp', 'pocosin', 'pososin')): return 'Swamp or pocosin'
-    return 'Stream'
-
 
 def main(root):
     os.makedirs(OUT, exist_ok=True)
@@ -111,9 +103,6 @@ def main(root):
         return index[key]
     grid('sewer', s, scode, 0.04, 1.0, {'fields': ['Type', 'Diameter (in)', 'Material', 'Year installed', 'Pipe ID'], 'props': props})
 
-    h = gpd.read_file(find(root, 'jchydro.shp')).set_crs(2264, allow_override=True)
-    kinds = ['Stream', 'Pond or lake', 'Swamp or pocosin', 'Neuse River', 'Little River']
-    grid('hydro', h, lambda r: kinds.index(hydro_kind(r.HYDRO_CODE)), 0.03, 3.0, {'kinds': kinds})
 
 
     feats = []
