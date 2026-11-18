@@ -271,6 +271,214 @@
     return '<p class="lead">' + esc((a.ROUTE || '') + ' ' + (a.LOCATION || '')) + '</p><p class="sublead">' + esc(a.COUNTY || '') + ' County, NCDOT count station</p><dl>' + yrs.join('') + '</dl>';
   }
 
+  // ------------------------------------------------------------------ local line layers (county downloads cut into grid cells)
+  // Each cell file holds [code, encoded polyline] pairs; tiles are drawn on canvas, so tens of thousands of lines stay fast.
+  function decodeLine(s) {
+    const out = [];
+    let i = 0, lat = 0, lng = 0;
+    while (i < s.length) {
+      for (let k = 0; k < 2; k++) {
+        let b, sh = 0, r = 0;
+        do { b = s.charCodeAt(i++) - 63; r |= (b & 0x1f) << sh; sh += 5; } while (b >= 0x20);
+        const d = (r & 1) ? ~(r >> 1) : (r >> 1);
+        if (k === 0) lat += d; else lng += d;
+      }
+      const la = lat / 1e6, ln = lng / 1e6, sn = Math.sin(la * Math.PI / 180);
+      out.push((ln + 180) / 360 * 256, (0.5 - Math.log((1 + sn) / (1 - sn)) / (4 * Math.PI)) * 256);
+    }
+    return Float64Array.from(out);
+  }
+  function worldPx(lat, lng) {
+    const sn = Math.sin(lat * Math.PI / 180);
+    return [(lng + 180) / 360 * 256, (0.5 - Math.log((1 + sn) / (1 - sn)) / (4 * Math.PI)) * 256];
+  }
+  function segDist(px, py, a, i) {
+    const x1 = a[i], y1 = a[i + 1], x2 = a[i + 2], y2 = a[i + 3], dx = x2 - x1, dy = y2 - y1, L = dx * dx + dy * dy;
+    let t = L ? ((px - x1) * dx + (py - y1) * dy) / L : 0;
+    t = Math.max(0, Math.min(1, t));
+    const ex = x1 + t * dx - px, ey = y1 + t * dy - py;
+    return Math.sqrt(ex * ex + ey * ey);
+  }
+  function makeGridLayer(def) {
+    let meta = null, metaP = null, mt = null, visible = false;
+    const cache = {};
+    const getMeta = () => metaP || (metaP = fetch(def.grid + '/meta.json').then(r => r.json()).then(m => { meta = m; meta.has = new Set(m.cells); return m; }));
+    const cell = k => cache[k] || (cache[k] = fetch(def.grid + '/' + k + '.json').then(r => r.json()).then(a => a.map(x => ({ c: x[0], p: decodeLine(x[1]) }))).catch(() => []));
+    function cellsIn(w, s, e, n) {
+      const c = meta.cell, out = [];
+      for (let i = Math.floor(w / c); i <= Math.floor(e / c); i++)
+        for (let j = Math.floor(s / c); j <= Math.floor(n / c); j++) if (meta.has.has(i + '_' + j)) out.push(i + '_' + j);
+      return out;
+    }
+    const lngOf = x => x / 256 * 360 - 180, latOf = y => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / 256))) * 180 / Math.PI;
+    async function paint(cv, x, y, z) {
+      if (def.minZoom && z < def.minZoom) return;
+      await getMeta();
+      const sc = Math.pow(2, z), pad = 4 / sc;
+      const wx0 = x * 256 / sc - pad, wy0 = y * 256 / sc - pad, wx1 = (x + 1) * 256 / sc + pad, wy1 = (y + 1) * 256 / sc + pad;
+      const keys = cellsIn(lngOf(wx0), latOf(wy1), lngOf(wx1), latOf(wy0));
+      if (!keys.length) return;
+      const sets = await Promise.all(keys.map(cell));
+      if (!visible) return;
+      const r = cv.width / 256, ctx = cv.getContext('2d');
+      ctx.scale(r, r); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      const labels = [];
+      sets.forEach(lines => lines.forEach(L => {
+        const st = GRID_STYLE[def.render].call({ meta: meta }, L.c, z);
+        if (!st) return;
+        const p = L.p;
+        ctx.beginPath();
+        for (let i = 0; i < p.length; i += 2) {
+          const px = (p[i] * sc - x * 256), py = (p[i + 1] * sc - y * 256);
+          i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+        }
+        ctx.strokeStyle = st.color; ctx.lineWidth = st.width; ctx.globalAlpha = st.alpha == null ? 0.9 : st.alpha;
+        ctx.setLineDash(st.dash || []);
+        ctx.stroke();
+        if (st.label && p.length >= 8) {
+          const m = Math.floor(p.length / 4) * 2, lx = p[m] * sc - x * 256, ly = p[m + 1] * sc - y * 256;
+          if (lx > 18 && lx < 238 && ly > 10 && ly < 246) labels.push([st.label, lx, ly, st.color]);
+        }
+      }));
+      ctx.globalAlpha = 1; ctx.setLineDash([]);
+      ctx.font = '600 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      labels.forEach(l => { ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.strokeText(l[0], l[1], l[2]); ctx.fillStyle = l[3]; ctx.fillText(l[0], l[1], l[2]); });
+    }
+    function Tiles() { this.tileSize = new google.maps.Size(256, 256); }
+    Tiles.prototype.getTile = function (coord, z, doc) {
+      const cv = doc.createElement('canvas'), r = Math.min(2, Math.ceil(window.devicePixelRatio || 1));
+      cv.width = cv.height = 256 * r; cv.style.width = cv.style.height = '256px';
+      const n = Math.pow(2, z), x = ((coord.x % n) + n) % n;
+      paint(cv, x, coord.y, z).catch(() => {});
+      return cv;
+    };
+    Tiles.prototype.releaseTile = function () {};
+    // Nearest line to a spot, searching out to `reach` degrees; distance returned in feet.
+    async function nearest(lat, lng, reach) {
+      await getMeta();
+      const sets = await Promise.all(cellsIn(lng - reach, lat - reach, lng + reach, lat + reach).map(cell));
+      const [px, py] = worldPx(lat, lng);
+      let best = null;
+      sets.forEach(lines => lines.forEach(L => {
+        if (def.hitFilter && !def.hitFilter(L.c)) return;
+        for (let i = 0; i + 3 < L.p.length; i += 2) { const d = segDist(px, py, L.p, i); if (!best || d < best.d) best = { d: d, c: L.c }; }
+      }));
+      if (!best) return null;
+      best.ft = best.d * (40075016.686 / 256) * Math.cos(lat * Math.PI / 180) * 3.28084;
+      return best;
+    }
+    return {
+      show() {
+        visible = true;
+        getMeta().catch(() => rowState(def.id, 'This layer could not be loaded.', 'warn'));
+        if (!mt) mt = new Tiles();
+        if (map.overlayMapTypes.getArray().indexOf(mt) < 0) map.overlayMapTypes.push(mt);
+      },
+      hide() { visible = false; const i = map.overlayMapTypes.getArray().indexOf(mt); if (i >= 0) map.overlayMapTypes.removeAt(i); },
+      refresh() {},
+      identify(lat, lng) {
+        if (meta && meta.bounds && (lng < meta.bounds[0] - 0.05 || lng > meta.bounds[2] + 0.05 || lat < meta.bounds[1] - 0.05 || lat > meta.bounds[3] + 0.05)) return null;
+        return [{ local: async () => {
+          const mpp = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, map.getZoom()) * 3.28084;
+          const b = await nearest(lat, lng, def.reach || 0.005);
+          return GRID_DESCRIBE[def.render](b, meta, mpp);
+        } }];
+      }
+    };
+  }
+  const plural = (n, w) => num(n) + ' ' + w + (Math.round(n) === 1 ? '' : 's');
+  const GRID_STYLE = {
+    sewer(c, z) {
+      const p = this.meta.props[c] || [], t = p[0] || '', d = p[1] || 8;
+      const w = (d <= 8 ? 1.6 : d <= 15 ? 2.6 : 3.6) * (z >= 16 ? 1.3 : 1);
+      if (/Force/.test(t)) return { color: '#C2410C', width: w, dash: [6, 4] };
+      if (/Gravity/.test(t)) return { color: '#15803D', width: w };
+      return { color: '#9CA3AF', width: 1.2, dash: [2, 4], alpha: 0.8 };
+    },
+    hydro(c) {
+      return [{ color: '#2563EB', width: 1.3 }, { color: '#0284C7', width: 1.3 }, { color: '#0F766E', width: 1.2, dash: [4, 3] }, { color: '#1D4ED8', width: 2.6 }, { color: '#1D4ED8', width: 2.2 }][c];
+    },
+    contours(c, z) {
+      const index = c % 10 === 0;
+      if (!index && z < 16) return null;
+      return index ? { color: '#7C2D12', width: z >= 17 ? 1.3 : 1, alpha: 0.8, label: z >= 17 ? c + '' : null } : { color: '#A16207', width: 0.6, alpha: 0.55 };
+    }
+  };
+  const GRID_DESCRIBE = {
+    sewer(b, meta, mpp) {
+      if (!b) return [{ title: 'County sewer', html: '<p class="sublead">No Johnston County Public Utilities sewer line within about half a mile.</p><p class="fineprint">Towns such as Smithfield, Clayton, Selma and Benson run their own systems, which are not in this layer.</p>' }];
+      const p = meta.props[b.c], on = b.ft <= Math.max(12, 10 * mpp);
+      const rows = meta.fields.map((f, i) => p[i] != null && p[i] !== '' ? '<dt>' + esc(f) + '</dt><dd>' + esc(p[i]) + '</dd>' : '').join('');
+      return [{ title: on ? 'County sewer line' : 'Nearest county sewer line', html: '<p class="lead">' + esc((p[1] ? p[1] + '-inch ' : '') + (p[0] || 'Sewer line').toLowerCase()) + '</p>' +
+        '<p class="sublead">' + (on ? 'At this spot' : 'About ' + plural(Math.round(b.ft / 10) * 10, 'foot').replace('foots', 'feet') + ' away, straight line') + '</p><dl>' + rows + '</dl>' +
+        '<p class="fineprint">Johnston County Public Utilities sewer map. Capacity, depth and permission to connect have to be confirmed with the county. Town-owned systems are not shown.</p>' }];
+    },
+    hydro(b, meta, mpp) {
+      if (!b) return null;
+      const on = b.ft <= Math.max(12, 10 * mpp);
+      return [{ title: on ? 'Mapped water feature' : 'Nearest mapped stream or pond', html: '<p class="lead">' + esc(meta.kinds[b.c]) + '</p>' +
+        '<p class="sublead">' + (on ? 'At this spot' : 'About ' + num(Math.round(b.ft / 10) * 10) + ' feet away') + '</p>' +
+        '<p class="fineprint">Johnston County hydrology (2013). Most of the county is in the Neuse River basin, where 50-foot riparian buffers can apply along streams; NCDEQ makes the call on site.</p>' }];
+    },
+    contours(b, meta, mpp) {
+      if (!b || b.ft > Math.max(60, 40 * mpp)) return null;
+      return [{ title: 'Ground elevation (approximate)', html: '<p class="lead">About ' + num(b.c) + ' ft above sea level</p><p class="sublead">Nearest 2-foot contour line, ' + num(Math.max(1, Math.round(b.ft))) + ' ft away</p>' +
+        '<p class="fineprint">NCDOT 2-foot contours for Johnston County, 2005. Grading since then is not reflected. Use for screening only; a survey governs.</p>' }];
+    }
+  };
+
+  // ------------------------------------------------------------------ Johnston County school attendance zones
+  const SZ_COLORS = ['#BFDBFE', '#FDE68A', '#BBF7D0', '#FBCFE8', '#DDD6FE', '#FED7AA', '#A5F3FC', '#FECACA', '#D9F99D', '#E9D5FF', '#FEF08A', '#C7D2FE'];
+  const sz = { data: null, gj: null, level: 'Elementary', load: null };
+  function inRing(x, y, ring) {
+    let c = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+    }
+    return c;
+  }
+  function inGeom(lng, lat, g) {
+    const polys = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
+    return polys.some(p => inRing(lng, lat, p[0]) && !p.slice(1).some(h => inRing(lng, lat, h)));
+  }
+  function szStyle() {
+    const names = sz.gj.features.filter(f => f.properties.l === sz.level).map(f => f.properties.n).sort();
+    sz.data.setStyle(f => {
+      const mine = f.getProperty('l') === sz.level;
+      return { visible: mine, clickable: false, fillColor: SZ_COLORS[names.indexOf(f.getProperty('n')) % SZ_COLORS.length], fillOpacity: 0.32, strokeColor: '#1E3A8A', strokeWeight: 1.6, strokeOpacity: 0.85 };
+    });
+  }
+  H['jc-schoolzones'] = {
+    show() {
+      const row = rowEls['jc-schoolzones'].querySelector('.extra');
+      if (!row.innerHTML) {
+        row.innerHTML = '<div class="sub"><label class="sr" for="sz-level">Show zones for</label><select id="sz-level">' +
+          ['Elementary', 'Middle', 'High'].map(k => '<option>' + k + '</option>').join('') + '</select></div>';
+        row.querySelector('select').addEventListener('change', e => { sz.level = e.target.value; if (sz.data) szStyle(); });
+      }
+      row.hidden = false;
+      if (!sz.data) {
+        sz.data = new google.maps.Data();
+        sz.load = fetch('data/joco/school_zones.geojson').then(r => r.json()).then(gj => { sz.gj = gj; sz.data.addGeoJson(gj); szStyle(); })
+          .catch(() => rowState('jc-schoolzones', 'School zones could not be loaded.', 'warn'));
+      }
+      sz.data.setMap(map);
+    },
+    hide() { if (sz.data) sz.data.setMap(null); rowEls['jc-schoolzones'].querySelector('.extra').hidden = true; },
+    refresh() {},
+    identify(lat, lng) {
+      return [{ local: async () => {
+        await sz.load;
+        const hit = {};
+        (sz.gj ? sz.gj.features : []).forEach(f => { if (inGeom(lng, lat, f.geometry)) hit[f.properties.l] = f.properties.n; });
+        if (!Object.keys(hit).length) return null;
+        return [{ title: 'Assigned schools (Johnston County)', html: '<dl>' + ['Elementary', 'Middle', 'High'].map(l => hit[l] ? '<dt>' + l + '</dt><dd>' + esc(hit[l]) + '</dd>' : '').join('') + '</dl>' +
+          '<p class="fineprint">Johnston County Public Schools attendance zones from the county GIS site. Zones are redrawn when new schools open; confirm with the district.</p>' }];
+      } }];
+    }
+  };
+
   // ------------------------------------------------------------------ attribute display
   const SKIP = /^(objectid|objectid_1|fid|gfid|shape|globalid|shape[._].*|st_area.*|st_length.*|created_.*|last_edited.*|editor|.*\.objectid|.*\.shape)$/i;
   function label(k, aliases) {
@@ -372,6 +580,7 @@
       const put = (title, html) => { if (seq !== state.clickSeq) return; found++; const d = document.createElement('div'); d.className = 'sec'; d.innerHTML = '<h3>' + esc(title) + '</h3>' + html; secs.insertBefore(d, hold); };
       const jobs = idfs.map(idf => {
         if (idf.kind === 'parcel') sawParcelLayer = true;
+        if (idf.local) return idf.local().then(rs => (rs || []).forEach(r => put(r.title, r.html)));
         if (idf.service) {             // one request for every sub-layer of the service
           const b = map.getBounds(), div = map.getDiv();
           const ask = tol => arc((idf.url || def.url) + '/identify', { geometry: lng + ',' + lat, geometryType: 'esriGeometryPoint', sr: 4326, layers: 'all:' + (idf.layers || def.layers).join(','), tolerance: tol,
@@ -792,6 +1001,8 @@
     }
     if (on.has('news')) parts.push('<h4>Property news</h4>' + Object.keys(NEWS_COLORS).map(c => '<div class="row"><i class="dot" style="background:' + NEWS_COLORS[c] + '"></i>' + c + '</div>').join(''));
     if (on.has('listings') && !window.matchMedia('(max-width:760px)').matches) parts.push('<h4>SAS listings</h4>' + Object.keys(TYPE_COLOR).map(c => '<div class="row"><i class="dot" style="background:' + TYPE_COLOR[c] + '"></i>' + c + '</div>').join(''));
+    if (on.has('jc-sewer')) parts.push('<h4>Johnston County sewer</h4><div class="row"><i style="background:#15803D;height:3px"></i>Gravity sewer</div><div class="row"><i style="background:#C2410C;height:3px"></i>Force main</div><div class="row"><i style="background:#9CA3AF;height:3px"></i>Abandoned or inactive</div><p>Thicker lines are larger pipes.</p>');
+    if (on.has('jc-contours')) parts.push('<h4>Contours (Johnston County)</h4><div class="row"><i style="background:#7C2D12;height:3px"></i>Every 10 feet</div><div class="row"><i style="background:#A16207;height:2px"></i>Every 2 feet (zoom 16+)</div>');
     box.hidden = !parts.length;
     box.innerHTML = parts.slice(0, 2).join('<div style="height:8px"></div>');
   }
@@ -918,6 +1129,7 @@
     LAYERS.forEach(def => {
       if (def.type === 'arcgis' || def.type === 'image') H[def.id] = makeImageLayer(def);
       else if (def.type === 'features') H[def.id] = makeFeatureLayer(def);
+      else if (def.type === 'grid') H[def.id] = makeGridLayer(def);
     });
     buildLayerPanel();
     renderListings(); renderNews(); loadNews();

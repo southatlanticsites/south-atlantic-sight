@@ -3,7 +3,8 @@
 //   arcgis   - a public ArcGIS MapServer drawn by its own server (one image per view) with click lookup
 //   image    - an ArcGIS ImageServer (aerial photos)
 //   features - a hosted feature layer drawn in the browser
-//   custom   - built in app.js (listings, news, brands, demographics)
+//   custom   - built in app.js (listings, news, brands, demographics, school zones)
+//   grid     - local line data cut into grid cells under data/ (scripts/build_johnston.py), drawn as canvas tiles
 (function () {
   const NC1 = 'https://services.nconemap.gov/secure/rest/services/';
   const DOT = 'https://gis11.services.ncdot.gov/arcgis/rest/services/';
@@ -82,6 +83,11 @@
       note: 'US Fish and Wildlife mapped wetlands. Indicative only; a delineation is needed for any site.',
       identify: [{ layer: 0, title: 'Mapped wetland', tol: 1 }] },
 
+    { id: 'jc-hydro', group: 'Environment', name: 'Streams and ponds: Johnston County', type: 'grid', render: 'hydro', grid: 'data/joco/hydro', swatch: 'line:#2563EB', minZoom: 12, reach: 0.01,
+      note: 'Johnston County GIS hydrology (2013): streams, ponds, swamps and the Neuse and Little rivers. Click a spot for the nearest mapped stream or pond and the distance to it.' },
+    { id: 'jc-contours', group: 'Environment', name: 'Topography, 2-foot contours: Johnston County', type: 'grid', render: 'contours', grid: 'data/joco/contours', swatch: 'line:#7C2D12', minZoom: 15, reach: 0.002,
+      note: 'NCDOT 2-foot contours for Johnston County (2005). 10-foot lines show from zoom 15, every 2 feet from zoom 16, elevation labels from zoom 17. Click a spot for its approximate elevation. Sites graded since 2005 will differ; a survey governs.' },
+
     // ---------- Community
     { id: 'schools', group: 'Community', name: 'Public schools', type: 'arcgis', swatch: 'dot:#1D4ED8',
       url: NC1 + 'NC1Map_Education/MapServer', layers: [3], minZoom: 9,
@@ -90,6 +96,8 @@
       url: 'https://carto.nationalmap.gov/arcgis/rest/services/structures/MapServer', layers: [51], minZoom: 10,
       note: 'USGS National Map structures.',
       identify: [{ layer: 51, title: 'Fire or EMS station', tol: 10, pick: [['name', 'Station'], ['address', 'Address'], ['city', 'City']] }] },
+    { id: 'jc-schoolzones', group: 'Community', name: 'School attendance zones: Johnston County', type: 'custom', swatch: 'line:#1E3A8A', minZoom: 9,
+      note: 'Johnston County Public Schools elementary, middle and high school zones, from the county GIS site. Pick a level below; click any spot in the county for all three assigned schools.' },
     { id: 'planned', group: 'Community', name: 'Planned schools and fire stations', type: 'custom', swatch: 'dot:#F59E0B', hideWhenEmpty: true,
       note: 'New facilities from school board and city capital plans.' },
 
@@ -98,6 +106,8 @@
       url: 'https://services1.arcgis.com/Hp6G80Pky0om7QvQ/arcgis/rest/services/Electric_Power_Transmission_Lines/FeatureServer/0',
       kind: 'line', style: { stroke: '#7C2D12', weight: 2 }, title: 'Transmission line', pick: [['OWNER', 'Owner'], ['VOLTAGE', 'Voltage (kV)'], ['VOLT_CLASS', 'Voltage class'], ['TYPE', 'Type'], ['STATUS', 'Status'], ['SUB_1', 'From substation'], ['SUB_2', 'To substation']],
       note: 'Federal HIFLD transmission lines. Positions are approximate.' },
+    { id: 'jc-sewer', group: 'Utilities', name: 'Sewer lines: Johnston County Public Utilities', type: 'grid', render: 'sewer', grid: 'data/joco/sewer', swatch: 'line:#15803D', minZoom: 11, reach: 0.008,
+      note: 'County-owned sewer mains from Johnston County GIS (current download). Green is gravity sewer, orange dashes are force mains, gray is abandoned; thicker lines are larger pipes. Click a spot for the nearest line, its size and distance. Town systems (Smithfield, Clayton, Selma, Benson and others) are not included.' },
     { id: 'watersewer', group: 'Utilities', name: 'Public water and sewer service areas (2004)', type: 'arcgis', swatch: '#0284C7',
       url: NC1 + 'NC1Map_Water_Sewer_2004/MapServer', layers: [2, 4], opacity: 0.45, minZoom: 9,
       note: 'The only statewide service-area map, last compiled in 2004. Use as a starting point and confirm with the utility.',
