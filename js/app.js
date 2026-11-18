@@ -191,11 +191,13 @@
       const k = Math.min(1, 2048 / Math.max(w, h));
       w = Math.round(w * k); h = Math.round(h * k); dpi = Math.round(dpi * k);
       const bounds = new google.maps.LatLngBounds(fromMerc(box[0], box[1]), fromMerc(box[2], box[3]));
+      const zoomUrl = def.byZoom ? (def.byZoom.find(b => map.getZoom() >= b[0]) || [0, def.url])[1] : null;
       parts.forEach(s => {
+        const base = zoomUrl && s.p.url === def.url ? zoomUrl : s.p.url;
         const common = { bbox: box.join(','), bboxSR: 3857, imageSR: 3857, size: w + ',' + h, f: 'image' };
         const url = def.type === 'image'
-          ? s.p.url + '/exportImage?' + qs(Object.assign(common, { format: 'jpgpng' }))
-          : s.p.url + '/export?' + qs(Object.assign(common, { format: 'png32', transparent: true, dpi: dpi, layers: 'show:' + s.p.layers.join(',') }));
+          ? base + '/exportImage?' + qs(Object.assign(common, def.png ? { format: 'png32', transparent: true } : { format: 'jpgpng' }))
+          : base + '/export?' + qs(Object.assign(common, { format: 'png32', transparent: true, dpi: dpi, layers: 'show:' + s.p.layers.join(',') }));
         const seq = ++s.seq, img = new Image();
         img.onload = () => {
           if (seq !== s.seq || !visible) return;
@@ -398,11 +400,6 @@
     hydro(c) {
       return [{ color: '#2563EB', width: 1.3 }, { color: '#0284C7', width: 1.3 }, { color: '#0F766E', width: 1.2, dash: [4, 3] }, { color: '#1D4ED8', width: 2.6 }, { color: '#1D4ED8', width: 2.2 }][c];
     },
-    contours(c, z) {
-      const index = c % 10 === 0;
-      if (!index && z < 16) return null;
-      return index ? { color: '#7C2D12', width: z >= 17 ? 1.3 : 1, alpha: 0.8, label: z >= 17 ? c + '' : null } : { color: '#A16207', width: 0.6, alpha: 0.55 };
-    }
   };
   const GRID_DESCRIBE = {
     sewer(b, meta, mpp) {
@@ -419,11 +416,6 @@
       return [{ title: on ? 'Mapped water feature' : 'Nearest mapped stream or pond', html: '<p class="lead">' + esc(meta.kinds[b.c]) + '</p>' +
         '<p class="sublead">' + (on ? 'At this spot' : 'About ' + num(Math.round(b.ft / 10) * 10) + ' feet away') + '</p>' +
         '<p class="fineprint">Johnston County hydrology (2013). Most of the county is in the Neuse River basin, where 50-foot riparian buffers can apply along streams; NCDEQ makes the call on site.</p>' }];
-    },
-    contours(b, meta, mpp) {
-      if (!b || b.ft > Math.max(60, 40 * mpp)) return null;
-      return [{ title: 'Ground elevation (approximate)', html: '<p class="lead">About ' + num(b.c) + ' ft above sea level</p><p class="sublead">Nearest 2-foot contour line, ' + num(Math.max(1, Math.round(b.ft))) + ' ft away</p>' +
-        '<p class="fineprint">NCDOT 2-foot contours for Johnston County, 2005. Grading since then is not reflected. Use for screening only; a survey governs.</p>' }];
     }
   };
 
@@ -479,6 +471,20 @@
     }
   };
 
+  // Ground elevation from North Carolina's statewide LiDAR elevation model (3-foot grid, feet above sea level).
+  async function elevationAt(lat, lng) {
+    const svc = 'https://services.nconemap.gov/secure/rest/services/Elevation/DEM03/ImageServer';
+    const g = JSON.stringify({ x: lng, y: lat, spatialReference: { wkid: 4326 } });
+    const [px, cat] = await Promise.all([
+      arc(svc + '/identify', { geometry: g, geometryType: 'esriGeometryPoint', returnCatalogItems: false, returnGeometry: false }),
+      arc(svc + '/query', { geometry: lng + ',' + lat, geometryType: 'esriGeometryPoint', inSR: 4326, spatialRel: 'esriSpatialRelIntersects', where: 'maxps <= 500', outFields: 'name', returnGeometry: false }).catch(() => null)]);
+    const v = parseFloat(px && px.value);
+    if (!isFinite(v)) return null;
+    const src = cat && cat.features && cat.features[0] ? cat.features[0].attributes.name : '';
+    const yr = (/(20\d\d)/.exec(src) || [])[1];
+    return [{ title: 'Ground elevation', html: '<p class="lead">' + num(v) + ' ft above sea level</p><p class="sublead">North Carolina LiDAR, bare ground' + (yr ? ', ' + yr + ' flight' : '') + '</p>' +
+      '<p class="fineprint">From NC OneMap\'s statewide 3-foot elevation model. Grading after the flight is not reflected. Use for screening; a survey governs.</p>' }];
+  }
   // ------------------------------------------------------------------ attribute display
   const SKIP = /^(objectid|objectid_1|fid|gfid|shape|globalid|shape[._].*|st_area.*|st_length.*|created_.*|last_edited.*|editor|.*\.objectid|.*\.shape)$/i;
   function label(k, aliases) {
@@ -1002,7 +1008,6 @@
     if (on.has('news')) parts.push('<h4>Property news</h4>' + Object.keys(NEWS_COLORS).map(c => '<div class="row"><i class="dot" style="background:' + NEWS_COLORS[c] + '"></i>' + c + '</div>').join(''));
     if (on.has('listings') && !window.matchMedia('(max-width:760px)').matches) parts.push('<h4>SAS listings</h4>' + Object.keys(TYPE_COLOR).map(c => '<div class="row"><i class="dot" style="background:' + TYPE_COLOR[c] + '"></i>' + c + '</div>').join(''));
     if (on.has('jc-sewer')) parts.push('<h4>Johnston County sewer</h4><div class="row"><i style="background:#15803D;height:3px"></i>Gravity sewer</div><div class="row"><i style="background:#C2410C;height:3px"></i>Force main</div><div class="row"><i style="background:#9CA3AF;height:3px"></i>Abandoned or inactive</div><p>Thicker lines are larger pipes.</p>');
-    if (on.has('jc-contours')) parts.push('<h4>Contours (Johnston County)</h4><div class="row"><i style="background:#7C2D12;height:3px"></i>Every 10 feet</div><div class="row"><i style="background:#A16207;height:2px"></i>Every 2 feet (zoom 16+)</div>');
     box.hidden = !parts.length;
     box.innerHTML = parts.slice(0, 2).join('<div style="height:8px"></div>');
   }
@@ -1129,6 +1134,7 @@
     LAYERS.forEach(def => {
       if (def.type === 'arcgis' || def.type === 'image') H[def.id] = makeImageLayer(def);
       else if (def.type === 'features') H[def.id] = makeFeatureLayer(def);
+      if (def.elev) H[def.id].identify = (lat, lng) => [{ local: () => elevationAt(lat, lng) }];
       else if (def.type === 'grid') H[def.id] = makeGridLayer(def);
     });
     buildLayerPanel();
@@ -1142,7 +1148,7 @@
       o.setStyle({ fillOpacity: 0, strokeColor: '#0B1A33', strokeWeight: 1.5, strokeOpacity: 0.7, clickable: false });
     }).catch(() => {});
 
-    const start = Array.from(new Set((h.l != null ? h.l.split(',').filter(Boolean) : CFG.defaultLayers).map(id => /^zoning-/.test(id) ? 'zoning' : id)));
+    const start = Array.from(new Set((h.l != null ? h.l.split(',').filter(Boolean) : CFG.defaultLayers).map(id => /^zoning-/.test(id) ? 'zoning' : id === 'jc-contours' ? 'contours' : id)));
     const zAbout = rowEls.zoning && rowEls.zoning.querySelector('.about');
     if (zAbout) zAbout.textContent = ' Zoning from ' + ZSRC.length + ' city and county map services. It appears once you zoom in to a covered area, and each source uses its own colors, so click a spot for the district. Covered: ' + ZSRC.map(s => s.n).join('; ') + '.';
     google.maps.event.addListenerOnce(map, 'idle', () => {

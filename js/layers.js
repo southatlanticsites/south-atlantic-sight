@@ -7,6 +7,7 @@
 //   grid     - local line data cut into grid cells under data/ (scripts/build_johnston.py), drawn as canvas tiles
 (function () {
   const NC1 = 'https://services.nconemap.gov/secure/rest/services/';
+  const NCEL = NC1 + 'Elevation/';
   const DOT = 'https://gis11.services.ncdot.gov/arcgis/rest/services/';
   const WAKE = 'https://maps.wakegov.com/arcgis/rest/services/';
   const DURHAM = 'https://webgis2.durhamnc.gov/server/rest/services/PublicServices/';
@@ -85,8 +86,9 @@
 
     { id: 'jc-hydro', group: 'Environment', name: 'Streams and ponds: Johnston County', type: 'grid', render: 'hydro', grid: 'data/joco/hydro', swatch: 'line:#2563EB', minZoom: 12, reach: 0.01,
       note: 'Johnston County GIS hydrology (2013): streams, ponds, swamps and the Neuse and Little rivers. Click a spot for the nearest mapped stream or pond and the distance to it.' },
-    { id: 'jc-contours', group: 'Environment', name: 'Topography, 2-foot contours: Johnston County', type: 'grid', render: 'contours', grid: 'data/joco/contours', swatch: 'line:#7C2D12', minZoom: 15, reach: 0.002,
-      note: 'NCDOT 2-foot contours for Johnston County (2005). 10-foot lines show from zoom 15, every 2 feet from zoom 16, elevation labels from zoom 17. Click a spot for its approximate elevation. Sites graded since 2005 will differ; a survey governs.' },
+    { id: 'contours', group: 'Environment', name: 'Topography (contours and ground elevation)', type: 'image', png: true, swatch: 'line:#1F2937', minZoom: 13, opacity: 0.6, z: 8, elev: true,
+      url: NCEL + 'DEM03_Contours2_raster/ImageServer', byZoom: [[15, NCEL + 'DEM03_Contours2_raster/ImageServer'], [13, NCEL + 'DEM03_Contours20_raster/ImageServer']],
+      note: 'Statewide contours from North Carolina\'s LiDAR elevation program (bare ground, 3-foot grid, flown county by county; flight years vary). 20-foot lines at zoom 13-14, 2-foot lines from zoom 15. Click any spot for its ground elevation. Sites graded after the county\'s flight will differ; a survey governs.' },
 
     // ---------- Community
     { id: 'schools', group: 'Community', name: 'Public schools', type: 'arcgis', swatch: 'dot:#1D4ED8',

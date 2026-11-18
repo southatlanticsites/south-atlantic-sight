@@ -2,10 +2,10 @@
 
 Usage:  python3 scripts/build_johnston.py <folder with the extracted shapefiles>
 
-Expects Sewer.shp, jchydro.shp, 2ft_contours_NCDOT.shp, elementary.shp, middle.shp
+Expects Sewer.shp, jchydro.shp, elementary.shp, middle.shp
 and high.shp somewhere under that folder. Writes to data/joco/.
 
-Line layers (sewer, streams, contours) are cut into a grid of small files so the
+Line layers (sewer, streams) are cut into a grid of small files so the
 browser only fetches the cells in view. Each line is stored as a Google encoded
 polyline (precision 1e-6) with a short property code.
 """
@@ -115,10 +115,6 @@ def main(root):
     kinds = ['Stream', 'Pond or lake', 'Swamp or pocosin', 'Neuse River', 'Little River']
     grid('hydro', h, lambda r: kinds.index(hydro_kind(r.HYDRO_CODE)), 0.03, 3.0, {'kinds': kinds})
 
-    # Contours: values at or below 0 ft are errors in the source (the county's low point is ~90 ft).
-    t = gpd.read_file(find(root, '2ft_contours_NCDOT.shp'), columns=['Z_FEET']).set_crs(2264, allow_override=True)
-    t = t[(t.Z_FEET > 0) & (t.Z_FEET % 2 == 0)]
-    grid('contours', t, lambda r: int(r.Z_FEET), 0.01, 1.5, {})
 
     feats = []
     for lvl, fn in (('Elementary', 'elementary.shp'), ('Middle', 'middle.shp'), ('High', 'high.shp')):
