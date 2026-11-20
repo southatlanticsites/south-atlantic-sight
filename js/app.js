@@ -392,6 +392,8 @@
       },
       hide() { visible = false; const i = map.overlayMapTypes.getArray().indexOf(mt); if (i >= 0) map.overlayMapTypes.removeAt(i); },
       refresh() {},
+      nearest: nearest,
+      meta: () => meta,
       identify(lat, lng) {
         if (meta && meta.bounds && (lng < meta.bounds[0] - 0.05 || lng > meta.bounds[2] + 0.05 || lat < meta.bounds[1] - 0.05 || lat > meta.bounds[3] + 0.05)) return null;
         return [{ local: async () => {
@@ -1014,6 +1016,119 @@
     }
   };
 
+  // ------------------------------------------------------------------ sewer lines (many utilities, shown by area)
+  const SSRC = window.SIGHT_SEWER || [];
+  const SEWER_ZOOM = 14, SEWER_REACH = 0.007;
+  const jcSewerDef = { id: 'sewer', render: 'sewer', grid: 'data/joco/sewer', minZoom: 11, reach: 0.008,
+    hitFilter: c => { const m = jcSewer.meta(), p = m && m.props[c]; return !!p && /Gravity|Force/.test(p[0] || ''); } };
+  const jcSewer = makeGridLayer(jcSewerDef);
+  const sewer = { vis: false, subs: {} };
+  const sVal = (a, f) => f && a[f] != null && String(a[f]).trim() !== '' ? a[f] : null;
+  const sDiam = v => { const n = parseFloat(v); return isFinite(n) && n > 0 && n < 200 ? n : null; };
+  const sYear = v => { if (v == null || v === '') return null; const n = +v; if (!isFinite(n)) return null; const y = Math.abs(n) > 1e9 ? new Date(n).getUTCFullYear() : n; return y >= 1910 && y <= 2100 ? Math.round(y) : null; };
+  const sKind = (src, a) => src.f.t && /force|press/i.test(String(a[src.f.t] || '')) ? 'f' : src.k;
+  const sFields = src => ['d', 'm', 'y', 'o', 't'].map(k => src.f[k]).filter(Boolean).join(',') || '*';
+  function sewerStyle(kind, d) { return { clickable: false, strokeColor: kind === 'f' ? '#C2410C' : '#15803D', strokeOpacity: 0.9, strokeWeight: d >= 16 ? 4 : d >= 10 ? 3 : 2 }; }
+  function makeSewerSource(src) {
+    const data = new google.maps.Data();
+    let vis = false, seq = 0;
+    data.setStyle(f => sewerStyle(f.getProperty('k'), f.getProperty('d') || 8));
+    async function refresh() {
+      if (!vis) return;
+      const b = map.getBounds();
+      if (!b) return;
+      const my = ++seq, sw = b.getSouthWest(), ne = b.getNorthEast();
+      const p = { where: src.w || '1=1', geometry: [sw.lng(), sw.lat(), ne.lng(), ne.lat()].join(','), geometryType: 'esriGeometryEnvelope', inSR: 4326, spatialRel: 'esriSpatialRelIntersects',
+        outFields: sFields(src), outSR: 4326, f: 'geojson', resultRecordCount: 1000, maxAllowableOffset: (ne.lng() - sw.lng()) / 2500, geometryPrecision: 6 };
+      try {
+        const all = [];
+        for (let page = 0; page < 8; page++) {
+          const gj = await fetch(src.u + '/query?' + qs(Object.assign({ resultOffset: page * 1000 }, p))).then(r => r.json());
+          if (!gj || !gj.features) break;
+          all.push(gj);
+          const more = gj.exceededTransferLimit || (gj.properties && gj.properties.exceededTransferLimit);
+          if (!more || gj.features.length < 1000 || my !== seq) break;
+        }
+        if (my !== seq || !vis) return;
+        data.forEach(f => data.remove(f));
+        all.forEach(gj => {
+          gj.features.forEach(f => { const a = f.properties || {}; f.properties = { k: sKind(src, a), d: sDiam(sVal(a, src.f.d)) }; delete f.id; });
+          data.addGeoJson(gj);
+        });
+      } catch (e) { if (my === seq) rowState('sewer', 'A sewer map for this area (' + src.n + ') is not responding right now.', 'warn'); }
+    }
+    return { show() { vis = true; data.setMap(map); refresh(); }, hide() { vis = false; seq++; data.setMap(null); data.forEach(f => data.remove(f)); }, refresh: refresh };
+  }
+  const sHit = (s, w, so, e, n) => s.b[0] < e && s.b[2] > w && s.b[1] < n && s.b[3] > so;
+  function nearestInGeoJson(gj, lat, lng) {
+    const [px, py] = worldPx(lat, lng);
+    let best = null;
+    (gj.features || []).forEach(f => {
+      const g = f.geometry; if (!g) return;
+      const lines = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
+      lines.forEach(line => {
+        const a = [];
+        line.forEach(c => { const w = worldPx(c[1], c[0]); a.push(w[0], w[1]); });
+        for (let i = 0; i + 3 < a.length; i += 2) { const d = segDist(px, py, a, i); if (!best || d < best.d) best = { d: d, a: f.properties || {} }; }
+      });
+    });
+    if (best) best.ft = best.d * (40075016.686 / 256) * Math.cos(lat * Math.PI / 180) * 3.28084;
+    return best;
+  }
+  async function sewerNearest(lat, lng) {
+    const R = SEWER_REACH, cands = [];
+    const srcs = SSRC.filter(s => sHit(s, lng - R, lat - R, lng + R, lat + R));
+    const jobs = srcs.map(src => arc(src.u + '/query', { where: src.w || '1=1', geometry: [lng - R, lat - R, lng + R, lat + R].join(','), geometryType: 'esriGeometryEnvelope', inSR: 4326,
+      spatialRel: 'esriSpatialRelIntersects', outFields: sFields(src), outSR: 4326, f: 'geojson', resultRecordCount: 2000, geometryPrecision: 6 })
+      .then(gj => { const b = nearestInGeoJson(gj, lat, lng); if (b) cands.push({ ft: b.ft, util: sVal(b.a, src.f.o) ? String(sVal(b.a, src.f.o)).trim() + ' (via ' + src.n + ')' : src.n,
+        kind: sKind(src, b.a), d: sDiam(sVal(b.a, src.f.d)), m: sVal(b.a, src.f.m), y: sYear(sVal(b.a, src.f.y)) }); })
+      .catch(() => cands.push({ err: src.n })));
+    jobs.push(jcSewer.nearest(lat, lng, 0.008).then(b => {
+      if (!b) return;
+      const p = jcSewer.meta().props[b.c] || [];
+      cands.push({ ft: b.ft, util: 'Johnston County Public Utilities', kind: /Force/.test(p[0] || '') ? 'f' : 'g', d: p[1], m: p[2], y: p[3] });
+    }).catch(() => {}));
+    await Promise.all(jobs);
+    const ok = cands.filter(c => !c.err).sort((a, b) => a.ft - b.ft), errs = cands.filter(c => c.err).map(c => c.err);
+    const foot = '<p class="fineprint">From each utility\'s public sewer map. Capacity, depth, allocation and permission to connect have to be confirmed with the utility. Private lines are not shown.' +
+      (errs.length ? ' Not responding just now: ' + esc(Array.from(new Set(errs)).join('; ')) + '.' : '') + '</p>';
+    if (!ok.length) {
+      const covered = srcs.length || (jcSewer.meta() && lng > -78.75 && lng < -78.05 && lat > 35.25 && lat < 35.82);
+      return [{ title: 'Public sewer', html: '<p class="sublead">' + (covered ? 'No mapped public sewer line within about 2,000 feet.' : 'No public sewer map is loaded for this area yet. Durham, Greensboro, Burlington, High Point, Clayton and several other towns do not publish theirs.') + '</p>' + foot }];
+    }
+    const c = ok[0], mpp = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, map.getZoom()) * 3.28084, at = c.ft <= Math.max(12, 10 * mpp);
+    const rows = [['Utility', c.util], ['Type', c.kind === 'f' ? 'Force main (pressure)' : 'Gravity sewer'], ['Diameter (in)', c.d], ['Material', c.m], ['Year installed', c.y]]
+      .map(r => r[1] != null && r[1] !== '' ? '<dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd>' : '').join('');
+    const others = [];
+    ok.slice(1).forEach(o => { if (o.util !== c.util && others.length < 2 && !others.some(x => x.util === o.util)) others.push(o); });
+    return [{ title: at ? 'Public sewer line' : 'Nearest public sewer line', html: '<p class="lead">' + esc((c.d ? c.d + '-inch ' : '') + (c.kind === 'f' ? 'force main' : 'gravity sewer')) + '</p>' +
+      '<p class="sublead">' + (at ? 'At this spot' : 'About ' + num(Math.round(c.ft / 10) * 10) + ' feet away, straight line') + '</p><dl>' + rows + '</dl>' +
+      (others.length ? '<p class="sublead">Also nearby: ' + others.map(o => esc(o.util) + ', about ' + num(Math.round(o.ft / 10) * 10) + ' ft').join('; ') + '</p>' : '') + foot }];
+  }
+  H.sewer = {
+    show() { sewer.vis = true; jcSewer.show(); this.refresh(); },
+    hide() { sewer.vis = false; jcSewer.hide(); Object.keys(sewer.subs).forEach(i => { const s = sewer.subs[i]; if (s.on) { s.h.hide(); s.on = false; } }); },
+    refresh() {
+      if (!sewer.vis) return;
+      const z = map.getZoom(), b = map.getBounds();
+      if (!b) return;
+      const sw = b.getSouthWest(), ne = b.getNorthEast();
+      const hits = SSRC.map((s, i) => ({ s: s, i: i })).filter(o => sHit(o.s, sw.lng(), sw.lat(), ne.lng(), ne.lat()));
+      const show = z >= SEWER_ZOOM ? hits : [];
+      const want = new Set(show.map(o => o.i));
+      Object.keys(sewer.subs).forEach(i => { const s = sewer.subs[i]; if (s.on && !want.has(+i)) { s.h.hide(); s.on = false; } });
+      show.forEach(o => {
+        let sub = sewer.subs[o.i];
+        if (!sub) sub = sewer.subs[o.i] = { on: false, h: makeSewerSource(o.s) };
+        if (!sub.on) { sub.on = true; sub.h.show(); } else sub.h.refresh();
+      });
+      const names = Array.from(new Set(hits.map(o => o.s.n)));
+      rowState('sewer', !names.length ? 'No city or town sewer map in this view (Johnston County pipes show where available).' :
+        (z >= SEWER_ZOOM ? 'In this view: ' : 'Zoom in to see pipes from: ') + names.join('; ') + '.', 'info');
+    },
+    identify(lat, lng) { return [{ local: () => sewerNearest(lat, lng) }]; }
+  };
+
   // ------------------------------------------------------------------ legend
   function updateLegend() {
     const box = $('#legend'), parts = [];
@@ -1025,7 +1140,7 @@
     }
     if (on.has('news')) parts.push('<h4>Property news</h4>' + Object.keys(NEWS_COLORS).map(c => '<div class="row"><i class="dot" style="background:' + NEWS_COLORS[c] + '"></i>' + c + '</div>').join(''));
     if (on.has('listings') && !window.matchMedia('(max-width:760px)').matches) parts.push('<h4>SAS listings</h4>' + Object.keys(TYPE_COLOR).map(c => '<div class="row"><i class="dot" style="background:' + TYPE_COLOR[c] + '"></i>' + c + '</div>').join(''));
-    if (on.has('jc-sewer')) parts.push('<h4>Johnston County sewer</h4><div class="row"><i style="background:#15803D;height:3px"></i>Gravity sewer</div><div class="row"><i style="background:#C2410C;height:3px"></i>Force main</div><div class="row"><i style="background:#9CA3AF;height:3px"></i>Abandoned or inactive</div><p>Thicker lines are larger pipes.</p>');
+    if (on.has('sewer')) parts.push('<h4>Sewer lines</h4><div class="row"><i style="background:#15803D;height:3px"></i>Gravity sewer</div><div class="row"><i style="background:#C2410C;height:3px"></i>Force main</div><p>Thicker lines are larger pipes. Zoom 14+ to see them.</p>');
     box.hidden = !parts.length;
     box.innerHTML = parts.slice(0, 2).join('<div style="height:8px"></div>');
   }
@@ -1166,7 +1281,7 @@
       o.setStyle({ fillOpacity: 0, strokeColor: '#0B1A33', strokeWeight: 1.5, strokeOpacity: 0.7, clickable: false });
     }).catch(() => {});
 
-    const start = Array.from(new Set((h.l != null ? h.l.split(',').filter(Boolean) : CFG.defaultLayers).map(id => /^zoning-/.test(id) ? 'zoning' : id === 'jc-contours' ? 'contours' : id === 'jc-hydro' ? 'hydro' : id)));
+    const start = Array.from(new Set((h.l != null ? h.l.split(',').filter(Boolean) : CFG.defaultLayers).map(id => /^zoning-/.test(id) ? 'zoning' : id === 'jc-contours' ? 'contours' : id === 'jc-hydro' ? 'hydro' : id === 'jc-sewer' ? 'sewer' : id)));
     const zAbout = rowEls.zoning && rowEls.zoning.querySelector('.about');
     if (zAbout) zAbout.textContent = ' Zoning from ' + ZSRC.length + ' city and county map services. It appears once you zoom in to a covered area, and each source uses its own colors, so click a spot for the district. Covered: ' + ZSRC.map(s => s.n).join('; ') + '.';
     google.maps.event.addListenerOnce(map, 'idle', () => {
