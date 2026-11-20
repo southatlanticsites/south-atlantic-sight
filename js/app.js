@@ -1103,6 +1103,7 @@
     ok.slice(1).forEach(o => { if (o.util !== c.util && others.length < 2 && !others.some(x => x.util === o.util)) others.push(o); });
     return [{ title: at ? 'Public sewer line' : 'Nearest public sewer line', html: '<p class="lead">' + esc((c.d ? c.d + '-inch ' : '') + (c.kind === 'f' ? 'force main' : 'gravity sewer')) + '</p>' +
       '<p class="sublead">' + (at ? 'At this spot' : 'About ' + num(Math.round(c.ft / 10) * 10) + ' feet away, straight line') + '</p><dl>' + rows + '</dl>' +
+      (c.ft > 1000 ? '<p class="sublead">Some town systems (Durham, Greensboro, Burlington, High Point, Clayton, Selma, Benson, Graham and others) are not mapped here, so a closer line may exist. Check with the town.</p>' : '') +
       (others.length ? '<p class="sublead">Also nearby: ' + others.map(o => esc(o.util) + ', about ' + num(Math.round(o.ft / 10) * 10) + ' ft').join('; ') + '</p>' : '') + foot }];
   }
   H.sewer = {
