@@ -1094,6 +1094,26 @@
     }
     return { show() { vis = true; data.setMap(map); refresh(); }, hide() { vis = false; seq++; data.setMap(null); data.forEach(f => data.remove(f)); }, refresh: refresh };
   }
+  const SAREA = window.SIGHT_SEWER_AREAS || [];
+  const sArea = { data: null, gj: {} };
+  const sAreaLoad = a => sArea.gj[a.u] || (sArea.gj[a.u] = fetch(a.u + '/query?' + qs({ where: '1=1', outFields: '*', outSR: 4326, f: 'geojson', geometryPrecision: 5 })).then(r => r.json()));
+  function sAreaShow(on) {
+    if (!sArea.data) {
+      sArea.data = new google.maps.Data();
+      sArea.data.setStyle({ clickable: false, fillColor: '#22C55E', fillOpacity: 0.08, strokeColor: '#15803D', strokeWeight: 1.5, strokeOpacity: 0.7 });
+      SAREA.forEach(a => sAreaLoad(a).then(gj => { (gj.features || []).forEach(f => delete f.id); sArea.data.addGeoJson(gj); }).catch(() => {}));
+    }
+    sArea.data.setMap(on ? map : null);
+  }
+  async function sAreaNote(lat, lng) {
+    const a = SAREA.find(x => lng >= x.b[0] && lng <= x.b[2] && lat >= x.b[1] && lat <= x.b[3]);
+    if (!a) return null;
+    try {
+      const gj = await sAreaLoad(a);
+      const inside = (gj.features || []).some(f => f.geometry && inGeom(lng, lat, f.geometry));
+      return { inside: inside, html: '<p class="sublead">' + (inside ? 'Inside the ' + esc(a.n) : 'Outside the mapped ' + esc(a.n) + '; it has grown since this map was drawn, so ask the utility') + ' (' + esc(a.src) + ').</p>' };
+    } catch (e) { return null; }
+  }
   const sHit = (s, w, so, e, n) => s.b[0] < e && s.b[2] > w && s.b[1] < n && s.b[3] > so;
   function nearestInGeoJson(gj, lat, lng) {
     const [px, py] = worldPx(lat, lng);
@@ -1123,10 +1143,13 @@
       const p = jcSewer.meta().props[b.c] || [];
       cands.push({ ft: b.ft, util: 'Johnston County Public Utilities', kind: /Force/.test(p[0] || '') ? 'f' : 'g', d: p[1], m: p[2], y: p[3] });
     }).catch(() => {}));
+    const areaP = sAreaNote(lat, lng);
     await Promise.all(jobs);
+    const area = await areaP;
     const ok = cands.filter(c => !c.err).sort((a, b) => a.ft - b.ft), errs = cands.filter(c => c.err).map(c => c.err);
     const foot = '<p class="fineprint">From each utility\'s public sewer map. Capacity, depth, allocation and permission to connect have to be confirmed with the utility. Private lines are not shown.' +
       (errs.length ? ' Not responding just now: ' + esc(Array.from(new Set(errs)).join('; ')) + '.' : '') + '</p>';
+    if (!ok.length && area) return [{ title: 'Public sewer', html: area.html + '<p class="sublead">This utility does not publish its sewer pipes; Fayetteville PWC sends utility maps for a parcel on request.</p>' + foot }];
     if (!ok.length) {
       const covered = srcs.length || (jcSewer.meta() && lng > -78.75 && lng < -78.05 && lat > 35.25 && lat < 35.82);
       return [{ title: 'Public sewer', html: '<p class="sublead">' + (covered ? 'No mapped public sewer line within about 2,000 feet.' : 'No public sewer map is loaded for this area yet. Durham, Greensboro, Burlington, High Point, Clayton, Fayetteville PWC, CFPUA (Wilmington) and several other utilities do not publish theirs.') + '</p>' + foot }];
@@ -1138,12 +1161,13 @@
     ok.slice(1).forEach(o => { if (o.util !== c.util && others.length < 2 && !others.some(x => x.util === o.util)) others.push(o); });
     return [{ title: at ? 'Public sewer line' : 'Nearest public sewer line', html: '<p class="lead">' + esc((c.d ? c.d + '-inch ' : '') + (c.kind === 'f' ? 'force main' : 'gravity sewer')) + '</p>' +
       '<p class="sublead">' + (at ? 'At this spot' : 'About ' + num(Math.round(c.ft / 10) * 10) + ' feet away, straight line') + '</p><dl>' + rows + '</dl>' +
+      (area ? area.html : '') +
       (c.ft > 1000 ? '<p class="sublead">Some utilities (Durham, Greensboro, Burlington, High Point, Clayton, Fayetteville PWC, CFPUA in Wilmington and others) do not publish their sewer maps, so a closer line may exist. Check with the town.</p>' : '') +
       (others.length ? '<p class="sublead">Also nearby: ' + others.map(o => esc(o.util) + ', about ' + num(Math.round(o.ft / 10) * 10) + ' ft').join('; ') + '</p>' : '') + foot }];
   }
   H.sewer = {
-    show() { sewer.vis = true; jcSewer.show(); this.refresh(); },
-    hide() { sewer.vis = false; jcSewer.hide(); Object.keys(sewer.subs).forEach(i => { const s = sewer.subs[i]; if (s.on) { s.h.hide(); s.on = false; } }); },
+    show() { sewer.vis = true; jcSewer.show(); sAreaShow(true); this.refresh(); },
+    hide() { sewer.vis = false; jcSewer.hide(); sAreaShow(false); Object.keys(sewer.subs).forEach(i => { const s = sewer.subs[i]; if (s.on) { s.h.hide(); s.on = false; } }); },
     refresh() {
       if (!sewer.vis) return;
       const z = map.getZoom(), b = map.getBounds();
@@ -1176,7 +1200,7 @@
     }
     if (on.has('news')) parts.push('<h4>Property news</h4>' + Object.keys(NEWS_COLORS).map(c => '<div class="row"><i class="dot" style="background:' + NEWS_COLORS[c] + '"></i>' + c + '</div>').join(''));
     if (on.has('listings') && !window.matchMedia('(max-width:760px)').matches) parts.push('<h4>SAS listings</h4>' + Object.keys(TYPE_COLOR).map(c => '<div class="row"><i class="dot" style="background:' + TYPE_COLOR[c] + '"></i>' + c + '</div>').join(''));
-    if (on.has('sewer')) parts.push('<h4>Sewer lines</h4><div class="row"><i style="background:#15803D;height:3px"></i>Gravity sewer</div><div class="row"><i style="background:#C2410C;height:3px"></i>Force main</div><p>Thicker lines are larger pipes. Zoom 14+ to see them.</p>');
+    if (on.has('sewer')) parts.push('<h4>Sewer lines</h4><div class="row"><i style="background:#15803D;height:3px"></i>Gravity sewer</div><div class="row"><i style="background:#C2410C;height:3px"></i>Force main</div><div class="row"><i style="background:rgba(34,197,94,.25);border:1px solid #15803D"></i>Sewer service area (Fayetteville PWC, 2020)</div><p>Thicker lines are larger pipes. Zoom 14+ to see them.</p>');
     box.hidden = !parts.length;
     box.innerHTML = parts.slice(0, 2).join('<div style="height:8px"></div>');
   }

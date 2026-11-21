@@ -40,3 +40,8 @@ window.SIGHT_SEWER = [
   { n: 'Onslow Water and Sewer Authority (ONWASA)', u: 'https://services.arcgis.com/rbxWvGybg6v0euvX/arcgis/rest/services/Collections_AGOL/FeatureServer/14', k: 'f', b: [-77.62, 34.44, -77.1, 34.92], f: { d: 'DIAMETER', m: 'MATERIAL', y: 'INSTALLDATE' } },
   { n: 'Town of Kure Beach', u: 'https://services5.arcgis.com/FZXMbeNU6M1BTHki/arcgis/rest/services/Sewer_Line/FeatureServer/0', k: 'g', b: [-77.92, 33.98, -77.9, 34.01], f: { d: 'DIAMETER', t: 'Type' } }
 ];
+
+// Sewer service areas, used where a utility publishes no pipes. Drawn lightly; a click says whether the spot is inside.
+window.SIGHT_SEWER_AREAS = [
+  { n: 'Fayetteville PWC sewer service area', src: 'Cumberland County map, last edited Sept 2020', u: 'https://services1.arcgis.com/ssJTvu2LI9qRE1oE/arcgis/rest/services/Sewer_Service_Area/FeatureServer/0', b: [-78.94, 34.9, -78.74, 35.18] }
+];
