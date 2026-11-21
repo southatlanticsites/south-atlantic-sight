@@ -781,7 +781,7 @@
       brandState.layer = new google.maps.Data();
       brandState.layer.addListener('click', e => {
         const g = k => e.feature.getProperty(k);
-        handleClick(e.latLng, [{ title: g('c'), html: '<p class="lead">' + esc(g('b')) + '</p><p class="sublead">' + esc([g('a'), g('t')].filter(Boolean).join(', ')) + '</p>' }]);
+        handleClick(e.latLng, [{ title: g('c'), html: '<p class="lead">' + esc(g('b')) + '</p><p class="sublead">' + esc([g('a'), g('t')].filter(Boolean).join(', ')) + '</p><p class="fineprint">' + (g('s') === 'osm' ? 'From OpenStreetMap (© OpenStreetMap contributors). Confirm the store is open.' : 'From the brand\'s store locator, via All The Places.') + '</p>' }]);
       });
       fetch('data/brands.json').then(r => r.json()).then(d => {
         brandState.data = d.locations;

@@ -31,7 +31,7 @@
     { id: 'demographics', group: 'Market', name: 'Demographics', type: 'custom', swatch: '#3F7CAC',
       note: 'Census block groups, aged to 2025 with county growth factors. Click anywhere for 1, 3 and 5 mile totals.' },
     { id: 'brands', group: 'Market', name: 'Retail brand locations', type: 'custom', swatch: '#B4532A',
-      note: 'Coffee, QSR, grocery, big box, convenience and childcare brands, from each brand\'s store locator (All The Places). Coverage varies by brand.' },
+      note: 'Coffee, QSR, grocery, big box, convenience and childcare brands. Mainly from each brand\'s store locator (All The Places, newest complete weekly run), with OpenStreetMap (© OpenStreetMap contributors) filling stores the locators miss and brands with no locator feed, such as Harris Teeter and 7 Brew. Refreshed every Monday; click a dot for its source.' },
     { id: 'news', group: 'Market', name: 'Property news', type: 'custom', swatch: '#7A4EA3',
       note: 'Recent NC commercial real estate headlines. Filter by category in the News tab.' },
 
