@@ -136,16 +136,22 @@ def atp_nc(run, spider, polys):
     return rows
 
 
+OSM_FAILS = [0]   # consecutive failures; after 3 we stop asking Overpass this run
+
+
 def osm_nc(names, polys):
     """NC rows from OpenStreetMap for these brand tag values, or None if Overpass is unreachable."""
+    if OSM_FAILS[0] >= 3:
+        return None
     rx = "|".join(re.escape(n) for n in names)
-    q = '[out:json][timeout:120];nwr["brand"~"^(%s)$"](%s,%s,%s,%s);out tags center;' % ((rx,) + BBOX)
+    q = '[out:json][timeout:60];nwr["brand"~"^(%s)$"](%s,%s,%s,%s);out tags center;' % ((rx,) + BBOX)
     for attempt in range(2):
         for ep in OVERPASS:
             try:
-                d = json.loads(get(ep, data=urllib.parse.urlencode({"data": q}).encode(), timeout=180))
+                d = json.loads(get(ep, data=urllib.parse.urlencode({"data": q}).encode(), timeout=75))
             except Exception:
                 continue
+            OSM_FAILS[0] = 0
             rows = []
             for e in d.get("elements", []):
                 t = e.get("tags", {})
@@ -161,7 +167,8 @@ def osm_nc(names, polys):
                 addr = " ".join(x for x in (t.get("addr:housenumber"), t.get("addr:street")) if x)
                 rows.append({"lat": round(lat, 5), "lng": round(lng, 5), "a": addr, "t": t.get("addr:city") or "", "s": "osm"})
             return rows
-        time.sleep(20)
+        time.sleep(10)
+    OSM_FAILS[0] += 1
     return None
 
 
