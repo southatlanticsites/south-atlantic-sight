@@ -25,7 +25,7 @@ BRANDS = {
     "Starbucks": ("Coffee", "starbucks_us", ["Starbucks"]),
     "Dunkin'": ("Coffee", "dunkin_us", ["Dunkin'", "Dunkin' Donuts"]),
     "Dutch Bros": ("Coffee", "dutch_bros", ["Dutch Bros. Coffee", "Dutch Bros"]),
-    "7 Brew": ("Coffee", None, ["7 Brew", "7 Brew Coffee"]),          # its feed has no coordinates
+    "7 Brew": ("Coffee", "7_brew_us", ["7 Brew", "7 Brew Coffee"]),   # feed has no coordinates: geocoded from its store URLs
     "Biggby Coffee": ("Coffee", "biggby_coffee_us", ["Biggby Coffee"]),
     "Caribou Coffee": ("Coffee", "caribou_coffee_us", ["Caribou Coffee"]),
     "Culver's": ("QSR", "culvers_us", ["Culver's"]),
@@ -63,7 +63,9 @@ BRANDS = {
 }
 # OSM shop/amenity values that count as the store itself (skips a Walmart's fuel station, a Harris Teeter pharmacy, etc.)
 OSM_KINDS = {"shop": {"supermarket", "department_store", "wholesale", "convenience", "coffee", "variety_store", "general"},
-             "amenity": {"fast_food", "cafe", "restaurant", "fuel", "kindergarten", "childcare", "school"}}
+             "amenity": {"fast_food", "cafe", "restaurant", "kindergarten", "childcare", "school"}}
+FUEL_OK = {"Convenience"}   # a gas station only counts as the store for convenience brands (not a Costco or Harris Teeter fuel center)
+GEOCACHE = os.path.join(ROOT, "data", "geocode_cache.json")
 BBOX = (33.75, -84.4, 36.6, -75.4)   # S, W, N, E
 
 
@@ -93,7 +95,36 @@ def dist_m(a, b):
     return math.hypot(dx, dy)
 
 
-def atp_nc(run, spider, polys):
+def geocode(addr, cache):
+    """Google geocode with a cache kept in the repo, so each address is looked up once."""
+    if addr in cache:
+        return cache[addr]
+    key = os.environ.get("GOOGLE_GEOCODING_KEY")
+    if not key:
+        return None
+    try:
+        d = json.loads(get("https://maps.googleapis.com/maps/api/geocode/json?" + urllib.parse.urlencode({"address": addr, "key": key}), timeout=30))
+        r = d.get("results") or []
+        hit = None
+        if r and r[0].get("geometry", {}).get("location_type") in ("ROOFTOP", "RANGE_INTERPOLATED", "GEOMETRIC_CENTER"):
+            loc = r[0]["geometry"]["location"]; hit = [loc["lat"], loc["lng"]]
+        cache[addr] = hit
+        return hit
+    except Exception:
+        return None
+
+
+def slug_address(p):
+    """'https://locations.7brew.com/nc/fayetteville/3307-bragg-blvd' -> ('3307 Bragg Blvd', 'Fayetteville')."""
+    m = re.search(r"/nc/([a-z0-9-]+)/([a-z0-9-]+)", p.get("ref") or p.get("website") or "")
+    if not m:
+        return None
+    city = m.group(1).replace("-", " ").title()
+    street = re.sub(r"^\d+-(?=\d)", "", m.group(2)).replace("-", " ").title()
+    return street, city
+
+
+def atp_nc(run, spider, polys, cache=None):
     """NC rows from one All The Places run, or None if the file can't be read."""
     url = "https://alltheplaces-data.openaddresses.io/runs/%s/output/%s.geojson" % (run, spider)
     try:
@@ -114,12 +145,18 @@ def atp_nc(run, spider, polys):
     rows, seen = [], set()
     for f in feats:
         geom = f.get("geometry") or {}
+        p = f.get("properties", {})
         if geom.get("type") != "Point":
-            continue
+            sa = slug_address(p) if cache is not None else None
+            hit = geocode("%s, %s, NC" % sa, cache) if sa else None
+            if not hit:
+                continue
+            lat, lng = hit
+            p = dict(p, **{"addr:street_address": sa[0], "addr:city": sa[1], "addr:state": "NC"})
+            geom = {"type": "Point", "coordinates": [lng, lat]}
         lng, lat = geom["coordinates"][:2]
         if not (BBOX[0] <= lat <= BBOX[2] and BBOX[1] <= lng <= BBOX[3]):
             continue
-        p = f.get("properties", {})
         st = (p.get("addr:state") or "").strip().upper()
         if st and st not in ("NC", "NORTH CAROLINA"):
             continue
@@ -139,7 +176,7 @@ def atp_nc(run, spider, polys):
 OSM_FAILS = [0]   # consecutive failures; after 3 we stop asking Overpass this run
 
 
-def osm_nc(names, polys):
+def osm_nc(names, polys, fuel_ok=False):
     """NC rows from OpenStreetMap for these brand tag values, or None if Overpass is unreachable."""
     if OSM_FAILS[0] >= 3:
         return None
@@ -155,7 +192,7 @@ def osm_nc(names, polys):
             rows = []
             for e in d.get("elements", []):
                 t = e.get("tags", {})
-                kind_ok = any(t.get(k) in v for k, v in OSM_KINDS.items())
+                kind_ok = any(t.get(k) in v for k, v in OSM_KINDS.items()) or (fuel_ok and t.get("amenity") == "fuel")
                 if not kind_ok:
                     continue
                 c = e.get("center") or e
@@ -165,6 +202,8 @@ def osm_nc(names, polys):
                 if (t.get("addr:state") or "NC").upper() not in ("NC", "NORTH CAROLINA"):
                     continue
                 addr = " ".join(x for x in (t.get("addr:housenumber"), t.get("addr:street")) if x)
+                if any(dist_m((lat, lng), (r["lat"], r["lng"])) < 150 for r in rows):
+                    continue   # same store mapped twice (building and point)
                 rows.append({"lat": round(lat, 5), "lng": round(lng, 5), "a": addr, "t": t.get("addr:city") or "", "s": "osm"})
             return rows
         time.sleep(10)
@@ -176,6 +215,7 @@ def main():
     runs = [r["run_id"] for r in json.loads(get(HISTORY))][::-1][:8]   # newest first
     g = json.load(open(os.path.join(ROOT, "data", "nc_outline.geojson")))["features"][0]["geometry"]
     polys = g["coordinates"] if g["type"] == "MultiPolygon" else [g["coordinates"]]
+    cache = json.load(open(GEOCACHE)) if os.path.exists(GEOCACHE) else {}
     prev = {}
     if os.path.exists(OUT):
         for r in json.load(open(OUT)).get("locations", []):
@@ -187,7 +227,7 @@ def main():
         if spider:
             best = None
             for run in runs:
-                rows = atp_nc(run, spider, polys)
+                rows = atp_nc(run, spider, polys, cache)
                 if rows is None:
                     continue
                 if best is None or len(rows) > len(best[1]):
@@ -200,7 +240,7 @@ def main():
                 used, atp = best[0], best[1]
             elif base:
                 used, atp = "kept last week", prev[(label, "atp")]
-        osm = osm_nc(osm_names, polys)
+        osm = osm_nc(osm_names, polys, cat in FUEL_OK)
         osm_note = "ok"
         if osm is None:
             osm, osm_note = prev.get((label, "osm"), []), "unreachable, kept last week"
@@ -210,6 +250,7 @@ def main():
         report.append((label, len(atp), used, len(extra), osm_note))
         print("%-24s ATP %4d (%s)  +OSM %3d (%s)" % report[-1], flush=True)
         time.sleep(2)
+    json.dump(cache, open(GEOCACHE, "w"), indent=0, sort_keys=True)
     out.sort(key=lambda r: (r["c"], r["b"], r["t"]))
     json.dump({"source": "All The Places (newest complete run per brand) + OpenStreetMap; built " + time.strftime("%Y-%m-%d"),
                "report": [{"brand": b, "atp": n, "run": u, "osm_added": m, "osm": s} for b, n, u, m, s in report],

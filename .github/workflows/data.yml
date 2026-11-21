@@ -34,6 +34,8 @@ jobs:
         run: python3 scripts/build_places.py
       - name: Brand locations
         if: github.event.schedule == '43 9 * * 1' || inputs.what == 'brands' || inputs.what == 'all'
+        env:
+          GOOGLE_GEOCODING_KEY: ${{ secrets.GOOGLE_GEOCODING_KEY }}
         run: python3 scripts/build_brands.py
       - name: Johnston County zoning (county download, weekly)
         if: github.event.schedule == '43 9 * * 1' || inputs.what == 'johnston-zoning' || inputs.what == 'all'
