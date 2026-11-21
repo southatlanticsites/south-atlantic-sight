@@ -999,11 +999,21 @@
   }
   async function zStaticIdentify(src, lat, lng) {
     const gj = await zLoad(src);
-    const zones = [], overlays = [];
-    gj.features.forEach(f => { if (inGeom(lng, lat, f.geometry)) (f.properties.o ? overlays : zones).push(f.properties); });
-    if (!zones.length && !overlays.length) return null;
+    const hits = (la, ln) => { const zs = [], os = []; gj.features.forEach(f => { if (inGeom(ln, la, f.geometry)) (f.properties.o ? os : zs).push(f.properties); }); return [zs, os]; };
+    let [zones, overlays] = hits(lat, lng), near = false;
+    // Parcel-based town zoning leaves streets blank: if the click lands in a street, use the district a few steps away.
+    for (let r = 1; !zones.length && r <= 4; r++) {
+      for (let k = 0; k < 8 && !zones.length; k++) {
+        const a = k * Math.PI / 4, d = r * 0.0001;
+        const z2 = hits(lat + d * Math.sin(a), lng + d * Math.cos(a) / Math.cos(lat * Math.PI / 180))[0];
+        if (z2.length) { zones = z2; near = true; }
+      }
+    }
     const z = zones[0];
-    return [{ title: 'Zoning: ' + (z ? z.j : src.n), html: (z ? '<p class="lead">' + esc(z.z) + '</p><p class="sublead">' + esc(z.j === 'Johnston County' ? 'Johnston County (unincorporated)' : 'Town of ' + z.j) + '</p>' : '') +
+    // Transition districts are drawn around whole towns but only apply on county-zoned land.
+    overlays = overlays.filter(o => !/^Municipal transition/.test(o.o) || (z && z.j === 'Johnston County'));
+    if (!zones.length && !overlays.length) return null;
+    return [{ title: 'Zoning: ' + (z ? z.j : src.n), html: (z ? '<p class="lead">' + esc(z.z) + '</p><p class="sublead">' + esc(z.j === 'Johnston County' ? 'Johnston County (unincorporated)' : 'Town of ' + z.j) + (near ? ' (nearest district; this spot is in a street)' : '') + '</p>' : '') +
       (overlays.length ? '<p class="sublead">Overlay: ' + overlays.map(o => esc(o.o)).join('; ') + '</p>' : '') +
       '<p class="fineprint">From Johnston County\'s official zoning files (county and town zoning), refreshed weekly on this map. Confirm with the county or town planning office.</p>' }];
   }
