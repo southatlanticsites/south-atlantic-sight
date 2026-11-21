@@ -1013,9 +1013,9 @@
     // Transition districts are drawn around whole towns but only apply on county-zoned land.
     overlays = overlays.filter(o => !/^Municipal transition/.test(o.o) || (z && z.j === 'Johnston County'));
     if (!zones.length && !overlays.length) return null;
-    return [{ title: 'Zoning: ' + (z ? z.j : src.n), html: (z ? '<p class="lead">' + esc(z.z) + '</p><p class="sublead">' + esc(z.j === 'Johnston County' ? 'Johnston County (unincorporated)' : 'Town of ' + z.j) + (near ? ' (nearest district; this spot is in a street)' : '') + '</p>' : '') +
+    return [{ title: 'Zoning: ' + (z ? z.j : src.n), html: (z ? '<p class="lead">' + esc(z.z) + '</p><p class="sublead">' + esc(z.d ? z.d + ', City of ' + z.j : z.j === 'Johnston County' ? 'Johnston County (unincorporated)' : 'Town of ' + z.j) + (near ? ' (nearest district; this spot is in a street)' : '') + '</p>' : '') +
       (overlays.length ? '<p class="sublead">Overlay: ' + overlays.map(o => esc(o.o)).join('; ') + '</p>' : '') +
-      '<p class="fineprint">From Johnston County\'s official zoning files (county and town zoning), refreshed weekly on this map. Confirm with the county or town planning office.</p>' }];
+      '<p class="fineprint">' + esc(src.foot || 'From Johnston County\'s official zoning files (county and town zoning), refreshed weekly on this map. Confirm with the county or town planning office.') + '</p>' }];
   }
   H.zoning = {
     show() { zoning.visible = true; this.refresh(); },

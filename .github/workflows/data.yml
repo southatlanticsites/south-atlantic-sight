@@ -37,11 +37,12 @@ jobs:
         env:
           GOOGLE_GEOCODING_KEY: ${{ secrets.GOOGLE_GEOCODING_KEY }}
         run: python3 scripts/build_brands.py
-      - name: Johnston County zoning (county download, weekly)
+      - name: Self-hosted zoning (Johnston County, Greensboro; weekly)
         if: github.event.schedule == '43 9 * * 1' || inputs.what == 'johnston-zoning' || inputs.what == 'all'
         run: |
           pip install --quiet geopandas pyogrio
           python3 scripts/build_johnston_zoning.py
+          python3 scripts/build_arcgis_zoning.py || echo "Greensboro zoning refresh failed; keeping last week's copy"
       - name: Demographics
         if: inputs.what == 'demographics' || inputs.what == 'all'
         run: python3 scripts/build_demographics.py
