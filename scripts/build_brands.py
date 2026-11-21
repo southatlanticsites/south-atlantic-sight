@@ -116,11 +116,11 @@ def geocode(addr, cache):
 
 def slug_address(p):
     """'https://locations.7brew.com/nc/fayetteville/3307-bragg-blvd' -> ('3307 Bragg Blvd', 'Fayetteville')."""
-    m = re.search(r"/nc/([a-z0-9-]+)/([a-z0-9-]+)", p.get("ref") or p.get("website") or "")
+    m = re.search(r"/nc/([a-z0-9-]+)/([^/?#]+)", (p.get("ref") or p.get("website") or "").lower())
     if not m:
         return None
     city = m.group(1).replace("-", " ").title()
-    street = re.sub(r"^\d+-(?=\d)", "", m.group(2)).replace("-", " ").title()
+    street = re.sub(r"^\d+-(?=\d)", "", urllib.parse.unquote(m.group(2))).replace(".", "").replace("-", " ").title()
     return street, city
 
 
