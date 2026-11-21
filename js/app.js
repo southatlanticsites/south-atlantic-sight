@@ -1157,7 +1157,7 @@
       (errs.length ? ' Not responding just now: ' + esc(Array.from(new Set(errs)).join('; ')) + '.' : '') + '</p>';
     if (!ok.length && area) return [{ title: 'Public sewer', html: area.html + '<p class="sublead">Fayetteville PWC does not publish its sewer pipes; it sends a utility map for a parcel on request.</p>' + foot }];
     if (!ok.length) {
-      const covered = srcs.length || (jcSewer.meta() && lng > -78.75 && lng < -78.05 && lat > 35.25 && lat < 35.82);
+      const covered = srcs.length || gridCovers(jcSewer, lat, lng);
       return [{ title: 'Public sewer', html: '<p class="sublead">' + (covered ? 'No mapped public sewer line within about 2,000 feet.' : 'No public sewer map is loaded for this area yet. Durham, Greensboro, Burlington, High Point, Clayton, Fayetteville PWC, CFPUA (Wilmington) and several other utilities do not publish theirs.') + '</p>' + foot }];
     }
     const c = ok[0], mpp = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, map.getZoom()) * 3.28084, at = c.ft <= Math.max(12, 10 * mpp);
@@ -1195,6 +1195,14 @@
     identify(lat, lng) { return [{ local: () => sewerNearest(lat, lng) }]; }
   };
 
+  // true when a self-hosted grid has any data cell at or next to this point (replaces a rough county box)
+  function gridCovers(layer, lat, lng) {
+    const m = layer.meta(); if (!m || !m.cells) return false;
+    const set = m._set || (m._set = new Set(m.cells)), c = m.cell, x = Math.floor(lng / c), y = Math.floor(lat / c);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) if (set.has((x + i) + '_' + (y + j))) return true;
+    return false;
+  }
+
   // ------------------------------------------------------------------ water lines (same machinery as sewer)
   const WSRC = window.SIGHT_WATER || [];
   const jcWater = makeGridLayer({ id: 'water', render: 'water', grid: 'data/joco/water', minZoom: 11, reach: 0.008 });
@@ -1218,7 +1226,7 @@
     const foot = '<p class="fineprint">From each utility\'s public water map. Pressure, fire flow, capacity and permission to connect have to be confirmed with the utility. Private lines are not shown.' +
       (errs.length ? ' Not responding just now: ' + esc(Array.from(new Set(errs)).join('; ')) + '.' : '') + '</p>';
     if (!ok.length) {
-      const covered = srcs.length || (jcWater.meta() && lng > -78.75 && lng < -78.05 && lat > 35.25 && lat < 35.82);
+      const covered = srcs.length || gridCovers(jcWater, lat, lng);
       return [{ title: 'Public water', html: '<p class="sublead">' + (covered ? 'No mapped public water main within about 2,000 feet.' : 'No public water map is loaded for this area yet. Raleigh Water, Durham, Greensboro, Burlington, CFPUA (Wilmington), Fayetteville PWC and several other utilities do not publish theirs.') + '</p>' + foot }];
     }
     const c = ok[0], mpp = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, map.getZoom()) * 3.28084, at = c.ft <= Math.max(12, 10 * mpp);
