@@ -983,6 +983,30 @@
     }
     return { show() { vis = true; data.setMap(map); refresh(); }, hide() { vis = false; seq++; data.setMap(null); data.forEach(f => data.remove(f)); }, refresh: refresh };
   }
+  // Self-hosted zoning files (type g): loaded once, drawn in the browser, looked up locally on click.
+  const zStatic = {};
+  const zLoad = src => zStatic[src.u] || (zStatic[src.u] = fetch(src.u).then(r => r.json()));
+  function makeStaticZoning(src) {
+    const data = new google.maps.Data();
+    let loaded = false;
+    data.setStyle(f => f.getProperty('o') ? { clickable: false, fillOpacity: 0, strokeColor: '#7C3AED', strokeWeight: 2, strokeOpacity: 0.9, zIndex: 2 }
+      : { clickable: false, fillColor: zColor(f.getProperty('z') || ''), fillOpacity: 0.5, strokeColor: '#5B4A1E', strokeWeight: 0.7, strokeOpacity: 0.8 });
+    return {
+      show() { data.setMap(map); if (!loaded) { loaded = true; zLoad(src).then(gj => data.addGeoJson(gj)).catch(() => { loaded = false; rowState('zoning', 'The ' + src.n + ' zoning file could not be loaded.', 'warn'); }); } },
+      hide() { data.setMap(null); },
+      refresh() {}
+    };
+  }
+  async function zStaticIdentify(src, lat, lng) {
+    const gj = await zLoad(src);
+    const zones = [], overlays = [];
+    gj.features.forEach(f => { if (inGeom(lng, lat, f.geometry)) (f.properties.o ? overlays : zones).push(f.properties); });
+    if (!zones.length && !overlays.length) return null;
+    const z = zones[0];
+    return [{ title: 'Zoning: ' + (z ? z.j : src.n), html: (z ? '<p class="lead">' + esc(z.z) + '</p><p class="sublead">' + esc(z.j === 'Johnston County' ? 'Johnston County (unincorporated)' : 'Town of ' + z.j) + '</p>' : '') +
+      (overlays.length ? '<p class="sublead">Overlay: ' + overlays.map(o => esc(o.o)).join('; ') + '</p>' : '') +
+      '<p class="fineprint">From Johnston County\'s official zoning files (county and town zoning), refreshed weekly on this map. Confirm with the county or town planning office.</p>' }];
+  }
   H.zoning = {
     show() { zoning.visible = true; this.refresh(); },
     hide() { zoning.visible = false; Object.keys(zoning.subs).forEach(i => { const s = zoning.subs[i]; if (s.on) { s.h.hide(); s.on = false; } }); },
@@ -997,7 +1021,7 @@
       Object.keys(zoning.subs).forEach(i => { const s = zoning.subs[i]; if (s.on && !want.has(+i)) { s.h.hide(); s.on = false; } });
       show.forEach(o => {
         let sub = zoning.subs[o.i];
-        if (!sub) sub = zoning.subs[o.i] = { on: false, h: o.s.t === 'x' ? makeImageLayer({ id: 'zoning', type: 'arcgis', url: o.s.u, layers: o.s.l, opacity: 0.6, swatch: '#D9A441' }) : makeZoningFeatures(o.s) };
+        if (!sub) sub = zoning.subs[o.i] = { on: false, h: o.s.t === 'x' ? makeImageLayer({ id: 'zoning', type: 'arcgis', url: o.s.u, layers: o.s.l, opacity: 0.6, swatch: '#D9A441' }) : o.s.t === 'g' ? makeStaticZoning(o.s) : makeZoningFeatures(o.s) };
         if (!sub.on) { sub.on = true; sub.h.show(); } else sub.h.refresh();
       });
       if (z < 11) return;
@@ -1008,6 +1032,7 @@
     identify(lat, lng) {
       const out = [];
       ZSRC.filter(s => lng >= s.b[0] && lng <= s.b[2] && lat >= s.b[1] && lat <= s.b[3]).slice(0, 6).forEach(s => {
+        if (s.t === 'g') { out.push({ local: () => zStaticIdentify(s, lat, lng) }); return; }
         const foot = '<p class="fineprint">From the public map service for ' + esc(s.n) + (s.d ? ', catalog entry dated ' + esc(s.d) : '') + '. Zoning changes often; confirm with the planning office.</p>';
         if (s.t === 'x' && s.l.length > 1) out.push({ service: true, url: s.u, layers: s.l, title: 'Zoning', tol: 1, src: s, foot: foot });
         else s.l.slice(0, 6).forEach(id => out.push({ url: s.u + '/' + id, title: 'Zoning: ' + s.n, tol: 1, pick: s.f, src: s, foot: foot }));
@@ -1026,7 +1051,7 @@
   const sVal = (a, f) => f && a[f] != null && String(a[f]).trim() !== '' ? a[f] : null;
   const sDiam = v => { const n = parseFloat(v); return isFinite(n) && n > 0 && n < 200 ? n : null; };
   const sYear = v => { if (v == null || v === '') return null; const n = +v; if (!isFinite(n)) return null; const y = Math.abs(n) > 1e9 ? new Date(n).getUTCFullYear() : n; return y >= 1910 && y <= 2100 ? Math.round(y) : null; };
-  const sKind = (src, a) => src.f.t && /force|press/i.test(String(a[src.f.t] || '')) ? 'f' : src.k;
+  const sKind = (src, a) => src.f.t && /force|press|vacuum|^\s*fm\s*$/i.test(String(a[src.f.t] || '')) ? 'f' : src.k;
   const sFields = src => ['d', 'm', 'y', 'o', 't'].map(k => src.f[k]).filter(Boolean).join(',') || '*';
   function sewerStyle(kind, d) { return { clickable: false, strokeColor: kind === 'f' ? '#C2410C' : '#15803D', strokeOpacity: 0.9, strokeWeight: d >= 16 ? 4 : d >= 10 ? 3 : 2 }; }
   function makeSewerSource(src) {
@@ -1094,7 +1119,7 @@
       (errs.length ? ' Not responding just now: ' + esc(Array.from(new Set(errs)).join('; ')) + '.' : '') + '</p>';
     if (!ok.length) {
       const covered = srcs.length || (jcSewer.meta() && lng > -78.75 && lng < -78.05 && lat > 35.25 && lat < 35.82);
-      return [{ title: 'Public sewer', html: '<p class="sublead">' + (covered ? 'No mapped public sewer line within about 2,000 feet.' : 'No public sewer map is loaded for this area yet. Durham, Greensboro, Burlington, High Point, Clayton and several other towns do not publish theirs.') + '</p>' + foot }];
+      return [{ title: 'Public sewer', html: '<p class="sublead">' + (covered ? 'No mapped public sewer line within about 2,000 feet.' : 'No public sewer map is loaded for this area yet. Durham, Greensboro, Burlington, High Point, Clayton, Fayetteville PWC, CFPUA (Wilmington) and several other utilities do not publish theirs.') + '</p>' + foot }];
     }
     const c = ok[0], mpp = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, map.getZoom()) * 3.28084, at = c.ft <= Math.max(12, 10 * mpp);
     const rows = [['Utility', c.util], ['Type', c.kind === 'f' ? 'Force main (pressure)' : 'Gravity sewer'], ['Diameter (in)', c.d], ['Material', c.m], ['Year installed', c.y]]
@@ -1103,7 +1128,7 @@
     ok.slice(1).forEach(o => { if (o.util !== c.util && others.length < 2 && !others.some(x => x.util === o.util)) others.push(o); });
     return [{ title: at ? 'Public sewer line' : 'Nearest public sewer line', html: '<p class="lead">' + esc((c.d ? c.d + '-inch ' : '') + (c.kind === 'f' ? 'force main' : 'gravity sewer')) + '</p>' +
       '<p class="sublead">' + (at ? 'At this spot' : 'About ' + num(Math.round(c.ft / 10) * 10) + ' feet away, straight line') + '</p><dl>' + rows + '</dl>' +
-      (c.ft > 1000 ? '<p class="sublead">Some town systems (Durham, Greensboro, Burlington, High Point, Clayton, Selma, Benson, Graham and others) are not mapped here, so a closer line may exist. Check with the town.</p>' : '') +
+      (c.ft > 1000 ? '<p class="sublead">Some utilities (Durham, Greensboro, Burlington, High Point, Clayton, Fayetteville PWC, CFPUA in Wilmington and others) do not publish their sewer maps, so a closer line may exist. Check with the town.</p>' : '') +
       (others.length ? '<p class="sublead">Also nearby: ' + others.map(o => esc(o.util) + ', about ' + num(Math.round(o.ft / 10) * 10) + ' ft').join('; ') + '</p>' : '') + foot }];
   }
   H.sewer = {

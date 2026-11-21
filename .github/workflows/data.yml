@@ -10,7 +10,7 @@ on:
         description: "What to rebuild"
         type: choice
         default: news
-        options: [news, brands, demographics, places, all]
+        options: [news, brands, demographics, places, johnston-zoning, all]
 
 permissions:
   contents: write
@@ -35,6 +35,11 @@ jobs:
       - name: Brand locations
         if: github.event.schedule == '43 9 * * 1' || inputs.what == 'brands' || inputs.what == 'all'
         run: python3 scripts/build_brands.py
+      - name: Johnston County zoning (county download, weekly)
+        if: github.event.schedule == '43 9 * * 1' || inputs.what == 'johnston-zoning' || inputs.what == 'all'
+        run: |
+          pip install --quiet geopandas pyogrio
+          python3 scripts/build_johnston_zoning.py
       - name: Demographics
         if: inputs.what == 'demographics' || inputs.what == 'all'
         run: python3 scripts/build_demographics.py

@@ -2,6 +2,7 @@
 // utilities' own servers, each tested (Nov 2026). Johnston County Public Utilities is self-hosted (data/joco/sewer).
 // n utility, u layer, k g=gravity / f=force main, b bounding box, w filter, f field names: d diameter, m material, y year/date, o owner
 // Not public (login required) when checked: Durham, Burlington, Greenville/Pitt, Fuquay-Varina, Spring Lake.
+// No public pipe map: Cape Fear Public Utility Authority (Wilmington, New Hanover), Fayetteville PWC (maps on request), Pender County.
 // Not found as public services: Greensboro, High Point, Clayton, Graham, Reidsville, Roxboro, Benson, Hillsborough, Winston-Salem.
 window.SIGHT_SEWER = [
   { n: 'Raleigh Water (Raleigh, Garner, Wake Forest, Knightdale, Wendell, Zebulon, Rolesville)', u: 'https://maps.raleighnc.gov/arcgis/rest/services/PublicUtility/SewerExternal/MapServer/3', k: 'g', b: [-78.83, 35.63, -78.25, 36.03], f: { d: 'DIAMETER', m: 'MATERIAL', y: 'INSTALLDATE' } },
@@ -28,5 +29,14 @@ window.SIGHT_SEWER = [
   { n: 'City of Eden', u: 'https://services3.arcgis.com/e3NxHWC9V2lElNX2/arcgis/rest/services/Eden_Utility_Map_WFL1/FeatureServer/10', k: 'g', b: [-79.81, 36.46, -79.66, 36.55], f: { d: 'pipe_size', m: 'pipe_mater' } },
   { n: 'City of Eden', u: 'https://services3.arcgis.com/e3NxHWC9V2lElNX2/arcgis/rest/services/Eden_Utility_Map_WFL1/FeatureServer/36', k: 'f', b: [-79.8, 36.46, -79.62, 36.55], f: { d: 'line_size', m: 'material' } },
   { n: 'Town of Southern Pines', u: 'https://services9.arcgis.com/AtyX8cqqHxBiQIog/arcgis/rest/services/SewerLayers_WFL1/FeatureServer/88', k: 'g', b: [-79.45, 35.13, -79.36, 35.26], f: { d: 'DIAMETER', m: 'MATERIAL', y: 'DATE_CONST' } },
-  { n: 'Town of Southern Pines', u: 'https://services9.arcgis.com/AtyX8cqqHxBiQIog/arcgis/rest/services/SewerLayers_WFL1/FeatureServer/89', k: 'f', b: [-79.45, 35.13, -79.36, 35.26], f: { d: 'DIAMETER', m: 'MATERIAL', y: 'DATE_CONST' } }
+  { n: 'Town of Southern Pines', u: 'https://services9.arcgis.com/AtyX8cqqHxBiQIog/arcgis/rest/services/SewerLayers_WFL1/FeatureServer/89', k: 'f', b: [-79.45, 35.13, -79.36, 35.26], f: { d: 'DIAMETER', m: 'MATERIAL', y: 'DATE_CONST' } },
+  { n: 'Brunswick County Public Utilities (county sewer map by Timmons Group)', u: 'https://services.arcgis.com/4fG3YBzBoefRGq66/arcgis/rest/services/Brunswick_County_NC_Sewer_Map/FeatureServer/3', k: 'g', b: [-78.62, 33.86, -77.98, 34.35], w: "use_d IN ('GRAVITY', 'FM', 'PRESSURE', 'VACUUM')", f: { d: 'size_d', m: 'mat_d', y: 'INSTALLDATE', t: 'use_d' } },
+  { n: 'Harnett Regional Water', u: 'https://gis.harnett.org/arcgis/rest/services/Public_Utilities/PU_Master_Sewer/MapServer/11', k: 'g', b: [-79.12, 35.21, -78.64, 35.56], f: { d: 'Diameter', m: 'Material' } },
+  { n: 'Harnett Regional Water', u: 'https://gis.harnett.org/arcgis/rest/services/Public_Utilities/PU_Master_Sewer/MapServer/13', k: 'f', b: [-79.12, 35.18, -78.64, 35.56], w: "Status IS NULL OR Status <> 'Abandoned'", f: { d: 'Diameter', m: 'Material', y: 'YearConstructed' } },
+  { n: 'Town of Angier (Harnett County map)', u: 'https://gis.harnett.org/arcgis/rest/services/Public_Utilities/PU_General/MapServer/9', k: 'g', b: [-78.78, 35.45, -78.71, 35.55], f: { d: 'DIAMETER' } },
+  { n: 'Town of Angier (Harnett County map)', u: 'https://gis.harnett.org/arcgis/rest/services/Public_Utilities/PU_General/MapServer/10', k: 'f', b: [-78.8, 35.44, -78.69, 35.56], f: {} },
+  { n: 'Town of Lillington (Harnett County map)', u: 'https://gis.harnett.org/arcgis/rest/services/Public_Utilities/PU_General/MapServer/12', k: 'g', b: [-78.86, 35.33, -78.77, 35.47], f: { d: 'DIAMETER', m: 'MATERIAL' } },
+  { n: 'Onslow Water and Sewer Authority (ONWASA)', u: 'https://services.arcgis.com/rbxWvGybg6v0euvX/arcgis/rest/services/Collections_AGOL/FeatureServer/12', k: 'g', b: [-77.62, 34.44, -77.1, 34.92], f: { d: 'DIAMETER', m: 'MATERIAL', y: 'INSTALLDATE' } },
+  { n: 'Onslow Water and Sewer Authority (ONWASA)', u: 'https://services.arcgis.com/rbxWvGybg6v0euvX/arcgis/rest/services/Collections_AGOL/FeatureServer/14', k: 'f', b: [-77.62, 34.44, -77.1, 34.92], f: { d: 'DIAMETER', m: 'MATERIAL', y: 'INSTALLDATE' } },
+  { n: 'Town of Kure Beach', u: 'https://services5.arcgis.com/FZXMbeNU6M1BTHki/arcgis/rest/services/Sewer_Line/FeatureServer/0', k: 'g', b: [-77.92, 33.98, -77.9, 34.01], f: { d: 'DIAMETER', t: 'Type' } }
 ];
