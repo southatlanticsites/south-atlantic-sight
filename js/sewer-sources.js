@@ -41,7 +41,7 @@ window.SIGHT_SEWER = [
   { n: 'Town of Kure Beach', u: 'https://services5.arcgis.com/FZXMbeNU6M1BTHki/arcgis/rest/services/Sewer_Line/FeatureServer/0', k: 'g', b: [-77.92, 33.98, -77.9, 34.01], f: { d: 'DIAMETER', t: 'Type' } }
 ];
 
-// Sewer service areas, used where a utility publishes no pipes. Drawn lightly; a click says whether the spot is inside.
+// Sewer service or agreement areas, used where a utility publishes no pipes. Drawn lightly; a click inside one explains it.
 window.SIGHT_SEWER_AREAS = [
-  { n: 'Fayetteville PWC sewer service area', src: 'Cumberland County map, last edited Sept 2020', u: 'https://services1.arcgis.com/ssJTvu2LI9qRE1oE/arcgis/rest/services/Sewer_Service_Area/FeatureServer/0', b: [-78.94, 34.9, -78.74, 35.18] }
+  { n: 'Fayetteville and Cumberland County sewer service agreement area', src: 'Cumberland County map, last edited Sept 2020', note: 'County land where the City of Fayetteville agreed not to annex and new construction must meet sewer design standards. Sewer connection or extension is possible but not guaranteed; Fayetteville PWC confirms.', u: 'https://services1.arcgis.com/ssJTvu2LI9qRE1oE/arcgis/rest/services/Sewer_Service_Area/FeatureServer/0', b: [-78.94, 34.9, -78.74, 35.18] }
 ];

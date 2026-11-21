@@ -1111,7 +1111,8 @@
     try {
       const gj = await sAreaLoad(a);
       const inside = (gj.features || []).some(f => f.geometry && inGeom(lng, lat, f.geometry));
-      return { inside: inside, html: '<p class="sublead">' + (inside ? 'Inside the ' + esc(a.n) : 'Outside the mapped ' + esc(a.n) + '; it has grown since this map was drawn, so ask the utility') + ' (' + esc(a.src) + ').</p>' };
+      if (!inside) return null;
+      return { inside: true, html: '<p class="sublead">Inside a ' + esc(a.n) + ' (' + esc(a.src) + '). ' + esc(a.note || '') + '</p>' };
     } catch (e) { return null; }
   }
   const sHit = (s, w, so, e, n) => s.b[0] < e && s.b[2] > w && s.b[1] < n && s.b[3] > so;
@@ -1149,7 +1150,7 @@
     const ok = cands.filter(c => !c.err).sort((a, b) => a.ft - b.ft), errs = cands.filter(c => c.err).map(c => c.err);
     const foot = '<p class="fineprint">From each utility\'s public sewer map. Capacity, depth, allocation and permission to connect have to be confirmed with the utility. Private lines are not shown.' +
       (errs.length ? ' Not responding just now: ' + esc(Array.from(new Set(errs)).join('; ')) + '.' : '') + '</p>';
-    if (!ok.length && area) return [{ title: 'Public sewer', html: area.html + '<p class="sublead">This utility does not publish its sewer pipes; Fayetteville PWC sends utility maps for a parcel on request.</p>' + foot }];
+    if (!ok.length && area) return [{ title: 'Public sewer', html: area.html + '<p class="sublead">Fayetteville PWC does not publish its sewer pipes; it sends a utility map for a parcel on request.</p>' + foot }];
     if (!ok.length) {
       const covered = srcs.length || (jcSewer.meta() && lng > -78.75 && lng < -78.05 && lat > 35.25 && lat < 35.82);
       return [{ title: 'Public sewer', html: '<p class="sublead">' + (covered ? 'No mapped public sewer line within about 2,000 feet.' : 'No public sewer map is loaded for this area yet. Durham, Greensboro, Burlington, High Point, Clayton, Fayetteville PWC, CFPUA (Wilmington) and several other utilities do not publish theirs.') + '</p>' + foot }];
@@ -1200,7 +1201,7 @@
     }
     if (on.has('news')) parts.push('<h4>Property news</h4>' + Object.keys(NEWS_COLORS).map(c => '<div class="row"><i class="dot" style="background:' + NEWS_COLORS[c] + '"></i>' + c + '</div>').join(''));
     if (on.has('listings') && !window.matchMedia('(max-width:760px)').matches) parts.push('<h4>SAS listings</h4>' + Object.keys(TYPE_COLOR).map(c => '<div class="row"><i class="dot" style="background:' + TYPE_COLOR[c] + '"></i>' + c + '</div>').join(''));
-    if (on.has('sewer')) parts.push('<h4>Sewer lines</h4><div class="row"><i style="background:#15803D;height:3px"></i>Gravity sewer</div><div class="row"><i style="background:#C2410C;height:3px"></i>Force main</div><div class="row"><i style="background:rgba(34,197,94,.25);border:1px solid #15803D"></i>Sewer service area (Fayetteville PWC, 2020)</div><p>Thicker lines are larger pipes. Zoom 14+ to see them.</p>');
+    if (on.has('sewer')) parts.push('<h4>Sewer lines</h4><div class="row"><i style="background:#15803D;height:3px"></i>Gravity sewer</div><div class="row"><i style="background:#C2410C;height:3px"></i>Force main</div><div class="row"><i style="background:rgba(34,197,94,.25);border:1px solid #15803D"></i>Sewer service agreement area (Fayetteville and Cumberland County, 2020)</div><p>Thicker lines are larger pipes. Zoom 14+ to see them.</p>');
     box.hidden = !parts.length;
     box.innerHTML = parts.slice(0, 2).join('<div style="height:8px"></div>');
   }
