@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Downtown Raleigh Parking | Parkway Corporation</title>
+<link rel="icon" href="../assets/sas-lantern.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css?v=1">
+</head>
+<body>
+<header>
+  <img src="../assets/sas-lantern.png" alt="" width="40" height="40">
+  <div>
+    <h1>Downtown Raleigh parking lots and decks, by owner</h1>
+    <div class="sub">Prepared for David Dobkin, Parkway Corporation, by <a href="https://www.southatlanticsites.com" target="_blank" rel="noopener">South Atlantic Sites</a> · Data as of Nov 24, 2026</div>
+  </div>
+  <div class="kpis" id="kpis"></div>
+</header>
+<main>
+  <div class="mapwrap">
+    <div id="map" aria-label="Map of downtown Raleigh parking"></div>
+    <details class="layers" id="layers" open>
+      <summary>Layers</summary>
+      <label><input type="checkbox" id="L_zone"> Zoning</label>
+      <label><input type="checkbox" id="L_ovl"> Historic and transit overlays</label>
+      <label><input type="checkbox" id="L_dt" checked> Downtown boundary</label>
+      <label><input type="checkbox" id="L_sat"> Aerial photo</label>
+    </details>
+    <div class="legend" id="legend"></div>
+  </div>
+  <aside>
+    <div class="filters">
+      <input type="search" id="q" placeholder="Search owner, address or PIN" aria-label="Search">
+      <div class="chips" id="kinds">
+        <button class="chip" aria-pressed="true" data-k="Surface lot"><i style="background:var(--lot)"></i>Surface lots</button>
+        <button class="chip" aria-pressed="true" data-k="Parking deck"><i style="background:var(--deck)"></i>Decks</button>
+        <button class="chip" aria-pressed="true" data-k="Noted site"><i style="background:var(--note)"></i>Noted sites</button>
+      </div>
+      <div class="chips" id="flags">
+        <button class="chip" aria-pressed="false" data-f="notes">Our notes</button>
+        <button class="chip" aria-pressed="false" data-f="news">In the news</button>
+        <button class="chip" aria-pressed="false" data-f="private">Private owners only</button>
+        <button class="chip" aria-pressed="false" data-f="dev">Development activity</button>
+      </div>
+      <div class="row2"><span id="count"></span>
+        <button class="unlock" id="unlock" type="button">Unlock notes</button>
+        <select id="sort" aria-label="Sort"><option value="ac">Largest first</option><option value="notes">Notes and news first</option><option value="val">Highest land value</option><option value="owner">Owner A to Z</option><option value="sale">Most recent sale</option></select></div>
+      <form id="pwform" hidden><input type="password" id="pw" placeholder="Notes password" autocomplete="current-password" aria-label="Notes password"><button type="submit">Unlock</button><span id="pwmsg"></span></form>
+    </div>
+    <div id="sheet" class="sheet" aria-live="polite"></div>
+    <div id="list" role="list"></div>
+    <details class="foot"><summary>Sources and method</summary>Wake County parcels (owner, values, sales); City of Raleigh planimetric parking areas, building footprints, zoning, overlays, permits and parking facility data; South Atlantic Sites notes (password protected); news links as cited. A lot is a parcel at least half covered by paved parking (or a third with almost no building); adjoining parcels with the same owner are merged. Space counts marked ≈ are estimates at 330 SF per space. Confirm owner and zoning before relying on them.</details>
+  </aside>
+</main>
+<script src="../js/config.js?v=18"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>
